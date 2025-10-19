@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../services/api'
-import { Paper, ProcessingProgress } from '../types'
+import { Paper } from '../types'
 
 interface ProcessingStatusProps {
   paper: Paper
@@ -10,15 +10,17 @@ export default function ProcessingStatus({ paper }: ProcessingStatusProps) {
   const queryClient = useQueryClient()
 
   // Poll for processing progress if paper is processing
-  const { data: progress } = useQuery({
+  const { data: progressResponse } = useQuery({
     queryKey: ['paper-progress', paper.id],
     queryFn: async () => {
-      const response = await apiClient.processPaper(paper.id)
-      return response.data as ProcessingProgress
+      const response = await apiClient.getPaperStatus(paper.id)
+      return response.data
     },
     enabled: paper.status === 'processing',
     refetchInterval: paper.status === 'processing' ? 3000 : false, // Poll every 3 seconds
   })
+
+  const progress = progressResponse?.progress?.translation
 
   const processMutation = useMutation({
     mutationFn: () => apiClient.processPaper(paper.id),

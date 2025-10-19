@@ -251,13 +251,19 @@ paths:
         Returns all translated chunks for a paper, ordered by index.
         Each chunk includes highlighted term markers.
 
+        Translation-not-ready behavior (SPEC CLARIFICATION):
+        - If the paper exists but no chunks are available yet (extraction not run) or
+          no chunks have been translated yet, the endpoint MUST return 200 with
+          an empty `chunks: []` array.
+        - 404 MUST be reserved for "paper not found" only.
+
         **Requirements**: FR-024, FR-025, FR-030
       operationId: getTranslation
       parameters:
         - $ref: '#/components/parameters/PaperId'
       responses:
         '200':
-          description: Translated chunks
+          description: Translated chunks (may be empty if not ready)
           content:
             application/json:
               schema:
@@ -271,7 +277,11 @@ paths:
                     items:
                       $ref: '#/components/schemas/TranslatedChunk'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Paper not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # ============================================================================
   # Chunks API

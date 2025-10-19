@@ -8,19 +8,27 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 #[derive(Debug, Serialize)]
-pub struct TranslatedChunk {
-    pub chunk_id: String,
-    pub index: i32,
-    pub trans_html: String,
+pub struct ChunkResponse {
+    pub id: String,
+    pub paper_id: String,
+    pub chunk_index: i32,
+    pub original_text: String,
+    pub translated_text: Option<String>,
+    pub content_hash: String,
+    pub status: String,
+    pub retry_count: i32,
+    pub error_message: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct TranslationResponse {
     pub paper_id: String,
-    pub chunks: Vec<TranslatedChunk>,
+    pub chunks: Vec<ChunkResponse>,
 }
 
-/// GET /papers/{id}/translation - Get translated text for a paper
+/// GET /papers/{id}/translation - Get all chunks with translations for a paper
 pub async fn get_translation(
     State(pool): State<SqlitePool>,
     Path(paper_id): Path<String>,
@@ -37,20 +45,35 @@ pub async fn get_translation(
         )));
     }
 
-    // Filter only translated chunks and transform
-    let translated_chunks: Vec<TranslatedChunk> = chunks
+    // Transform all chunks to response format
+    let chunk_responses: Vec<ChunkResponse> = chunks
         .into_iter()
-        .filter_map(|chunk| {
-            chunk.trans_html.map(|trans_html| TranslatedChunk {
-                chunk_id: chunk.id,
-                index: chunk.index,
-                trans_html,
-            })
+        .map(|chunk| {
+            let has_translation = chunk.trans_html.is_some();
+            let status = if has_translation {
+                "translated"
+            } else {
+                "pending"
+            };
+
+            ChunkResponse {
+                id: chunk.id,
+                paper_id: chunk.paper_id,
+                chunk_index: chunk.index,
+                original_text: chunk.src_text,
+                translated_text: chunk.trans_html,
+                content_hash: chunk.content_hash,
+                status: status.to_string(),
+                retry_count: 0, // Not implemented yet
+                error_message: None, // Not implemented yet
+                created_at: chunk.created_at.to_rfc3339(),
+                updated_at: chunk.updated_at.to_rfc3339(),
+            }
         })
         .collect();
 
     Ok(Json(TranslationResponse {
         paper_id,
-        chunks: translated_chunks,
+        chunks: chunk_responses,
     }))
 }

@@ -125,6 +125,10 @@ A researcher wants to review all extracted terms in a dedicated glossary view, s
 - **FR-029**: System MUST allow users to view the original PDF side-by-side with the translated text or in a separate tab
 - **FR-030**: System MUST synchronize term highlighting across all occurrences of the same term or its variants
 
+Clarification (API behavior for not-yet-translated papers):
+- When a paper exists but translation has not yet been produced (extraction/translation pending), `GET /api/papers/{id}/translation` MUST return 200 with payload `{ paper_id, chunks: [] }`.
+- 404 MUST only indicate that the paper resource itself does not exist.
+
 #### Progress Tracking & Error Recovery
 
 - **FR-031**: System MUST display granular progress indicators during paper processing (import → extraction → translation → term processing) with percentage completion

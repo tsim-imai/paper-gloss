@@ -39,7 +39,12 @@ class ApiClient {
   }
 
   async importPaperUrl(url: string, title: string) {
-    return this.client.post('/papers/import', { url, title })
+    const formData = new FormData()
+    formData.append('url', url)
+    formData.append('title', title)
+    return this.client.post('/papers/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
   }
 
   async listPapers(page = 1, limit = 20, status?: string) {
@@ -58,6 +63,10 @@ class ApiClient {
 
   async processPaper(paperId: string) {
     return this.client.post(`/papers/${paperId}/process`)
+  }
+
+  async getPaperStatus(paperId: string) {
+    return this.client.get(`/papers/${paperId}/status`)
   }
 
   async retryChunk(chunkId: string) {

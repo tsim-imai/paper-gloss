@@ -62,6 +62,7 @@ async fn main() -> Result<()> {
         .route("/api/papers/:id", get(api::papers::get_paper))
         .route("/api/papers/:id/translation", get(api::papers::get_translation))
         .route("/api/papers/:id/process", axum::routing::post(api::papers::process_paper))
+        .route("/api/papers/:id/status", get(api::papers::get_paper_status))
         .route("/api/papers/:id/file", get(api::papers::get_paper_file))
         // Chunks API
         .route("/api/chunks/:id/retry", axum::routing::post(api::chunks::retry_chunk))

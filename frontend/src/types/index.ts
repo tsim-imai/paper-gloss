@@ -74,10 +74,26 @@ export interface PaginatedResponse<T> {
   total_pages: number
 }
 
-export interface ProcessingProgress {
-  status: PaperStatus
+export interface TranslationProgress {
   total_chunks: number
-  translated_chunks: number
+  completed_chunks: number
   failed_chunks: number
-  extracted_terms: number
+}
+
+export interface DefinitionProgress {
+  total_terms: number
+  completed_definitions: number
+}
+
+export interface ProcessingProgress {
+  extraction: string
+  translation: TranslationProgress
+  term_extraction: string
+  definitions: DefinitionProgress
+}
+
+export interface ProcessingStatusResponse {
+  paper_id: string
+  status: PaperStatus
+  progress: ProcessingProgress
 }
