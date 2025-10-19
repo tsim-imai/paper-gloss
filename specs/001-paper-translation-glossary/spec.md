@@ -18,7 +18,7 @@ A researcher downloads an English machine learning paper PDF and wants to read i
 **Acceptance Scenarios**:
 
 1. **Given** a user has a PDF file on their local machine, **When** they upload the PDF via the interface, **Then** the system accepts the file, stores it, and displays a processing status indicator
-2. **Given** a user has a URL to a publicly accessible PDF, **When** they paste the URL into the import field, **Then** the system downloads the PDF, stores it, and displays a processing status indicator
+2. **Given** a user has an arXiv abstract URL (e.g., `https://arxiv.org/abs/2212.14578`), **When** they paste the URL and provide a paper title into the import form, **Then** the system validates the arXiv URL format, downloads the PDF from arXiv, stores it, and displays a processing status indicator
 3. **Given** a PDF has been imported and is being processed, **When** the user views the processing status, **Then** they see granular progress indicators (extraction → chunking → translation) with percentage completion
 4. **Given** translation has completed for a paper, **When** the user navigates to the translation view, **Then** they see the Japanese translated text organized by sections/paragraphs matching the original structure
 5. **Given** a user is viewing translated text, **When** they want to reference the original PDF, **Then** they can open the original PDF in a side-by-side or tabbed view
@@ -83,7 +83,7 @@ A researcher wants to review all extracted terms in a dedicated glossary view, s
 #### Paper Import & Storage
 
 - **FR-001**: System MUST accept PDF file uploads from the user's local filesystem
-- **FR-002**: System MUST accept URLs and automatically download PDF files from publicly accessible web locations
+- **FR-002**: System MUST accept arXiv abstract URLs (format: `https://arxiv.org/abs/{arxiv_id}`) and automatically download PDF files from arXiv (MVP: arXiv-only, other sources out of scope)
 - **FR-003**: System MUST store uploaded/downloaded PDFs in a persistent local file structure (`artifacts/papers/{paper_id}/source.pdf`)
 - **FR-004**: System MUST store paper metadata (title, source URL, import timestamp, processing status) in persistent storage
 - **FR-005**: System MUST detect when a PDF cannot be parsed or is corrupted, warn the user, and allow partial processing

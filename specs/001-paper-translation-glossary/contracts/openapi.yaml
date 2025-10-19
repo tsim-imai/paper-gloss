@@ -44,10 +44,20 @@ paths:
       tags: [Papers]
       summary: Import a paper from file or URL
       description: |
-        Imports a PDF paper from either a file upload or a public URL.
+        Imports a PDF paper from either a file upload or an arXiv URL.
         Creates a new Paper entity and triggers async processing pipeline.
 
         **Requirements**: FR-001, FR-002, FR-003, FR-004
+
+        **URL Import (arXiv-Only MVP)**:
+        - Only arXiv abstract URLs are accepted: `https://arxiv.org/abs/{arxiv_id}`
+        - Examples: `https://arxiv.org/abs/2212.14578`, `https://arxiv.org/abs/1706.03762v2`
+        - System automatically converts `/abs/` to `/pdf/` for download
+        - `title` field is REQUIRED when using URL import (user must provide)
+        - Timeout: 60 seconds, Max size: 100 MB
+        - Non-arXiv URLs will be rejected with 400 Bad Request
+
+        See [data-model.md § URL Import Specification](../data-model.md#url-import-specification-arxiv-only-mvp) for full details.
       operationId: importPaper
       requestBody:
         required: true
@@ -63,13 +73,23 @@ paths:
                 url:
                   type: string
                   format: uri
-                  description: PDF download URL (if importing from web)
+                  pattern: '^https://(www\.)?arxiv\.org/abs/\d{4}\.\d{4,5}(v\d+)?$'
+                  description: |
+                    arXiv abstract URL (if importing from web).
+                    MUST match pattern: https://arxiv.org/abs/{arxiv_id}
+                  example: "https://arxiv.org/abs/2212.14578"
                 title:
                   type: string
-                  description: Optional paper title (extracted from PDF metadata if omitted)
+                  minLength: 1
+                  maxLength: 500
+                  description: |
+                    Paper title.
+                    - REQUIRED when using `url` (arXiv import)
+                    - OPTIONAL when using `file` (extracted from PDF metadata if omitted, else filename)
+                  example: "Constitutional AI: Harmlessness from AI Feedback"
               oneOf:
                 - required: [file]
-                - required: [url]
+                - required: [url, title]
       responses:
         '201':
           description: Paper imported successfully, processing started
@@ -78,15 +98,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaperImportResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '422':
-          description: PDF parsing failed or corrupted file
+          description: |
+            Invalid request:
+            - Non-arXiv URL provided
+            - Missing title for URL import
+            - Malformed arXiv ID
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                nonArxivUrl:
+                  summary: Non-arXiv URL rejected
+                  value:
+                    error: "BadRequest"
+                    message: "Only arXiv URLs are supported (https://arxiv.org/abs/...)"
+                missingTitle:
+                  summary: Missing title for URL import
+                  value:
+                    error: "BadRequest"
+                    message: "Title is required when importing from URL"
+        '422':
+          description: |
+            PDF processing failed:
+            - PDF parsing error or corrupted file
+            - File size exceeds 100 MB
+            - Downloaded file is not a valid PDF
+            - PDF not found at arXiv (404)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  summary: PDF not found at arXiv
+                  value:
+                    error: "UnprocessableEntity"
+                    message: "PDF not found at arXiv. Verify the paper ID is correct."
+                tooLarge:
+                  summary: File size exceeds limit
+                  value:
+                    error: "UnprocessableEntity"
+                    message: "PDF file too large (max 100 MB)"
         '500':
           $ref: '#/components/responses/InternalServerError'
+        '504':
+          description: arXiv download timeout (>60 seconds)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "GatewayTimeout"
+                message: "arXiv download timed out. Please retry later."
 
   /papers/{id}/process:
     post:

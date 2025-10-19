@@ -323,6 +323,138 @@ pending → processing → completed
 
 ---
 
+## URL Import Specification (arXiv-Only MVP)
+
+### Scope
+
+**MVP Constraint**: URL import is limited to arXiv papers only. No other sources are supported.
+
+**Rationale**: arXiv provides a consistent URL structure and free public access, making it ideal for MVP validation. Expanding to other sources (NIPS, ACL Anthology, etc.) is explicitly out of scope until arXiv workflow is proven.
+
+### Accepted URL Patterns
+
+**Input Format** (user-provided):
+```
+https://arxiv.org/abs/{arxiv_id}
+```
+
+**Examples**:
+- `https://arxiv.org/abs/2212.14578`
+- `https://arxiv.org/abs/1706.03762` (Attention Is All You Need)
+- `https://arxiv.org/abs/2103.00020v2` (with version suffix)
+
+### URL Validation Rules
+
+**Accept**:
+- HTTPS only (no HTTP)
+- Host must be exactly `arxiv.org` (no subdomains except `www.arxiv.org`)
+- Path must match `/abs/{arxiv_id}` where `{arxiv_id}` is in format `YYMM.NNNNN` or `YYMM.NNNNNvN` (with optional version suffix)
+
+**Reject** (with 400 Bad Request):
+- Non-arXiv URLs (e.g., `https://openreview.net/...`)
+- arXiv PDF URLs (e.g., `https://arxiv.org/pdf/...`) - user should provide abstract page, not PDF directly
+- HTTP URLs (force HTTPS)
+- Malformed arXiv IDs
+
+### Download Workflow
+
+**Step 1: URL Transformation**
+```
+Input:  https://arxiv.org/abs/2212.14578
+Output: https://arxiv.org/pdf/2212.14578.pdf
+```
+
+**Transformation logic**:
+- Replace `/abs/` with `/pdf/`
+- Append `.pdf` suffix
+
+**Step 2: HTTP Download**
+- Timeout: 60 seconds
+- Max size: 100 MB (reject larger files with 422 Unprocessable Entity)
+- Follow redirects: Max 3 hops
+- Verify `Content-Type: application/pdf` header
+
+**Step 3: Storage**
+- Save to `artifacts/papers/{paper_id}/source.pdf`
+- Store original abstract URL in `Paper.source_url`
+
+### Title Extraction
+
+**Option 1 (Preferred)**: User-provided title (required field in UI)
+- Simplest implementation (YAGNI principle)
+- User can copy from arXiv abstract page
+
+**Option 2 (Future)**: Scrape from arXiv abstract page
+- Parse `<meta name="citation_title">` from `https://arxiv.org/abs/{arxiv_id}`
+- Fallback to filename if parsing fails
+- Out of scope for MVP (requires HTML parsing dependency)
+
+**MVP Decision**: Require user-provided title in `POST /papers/import` request body. Frontend should enforce this field as required when URL import is selected.
+
+### Error Handling
+
+| Error Condition | HTTP Status | Response Message | User Action |
+|----------------|-------------|------------------|-------------|
+| Non-arXiv URL | 400 Bad Request | "Only arXiv URLs are supported (https://arxiv.org/abs/...)" | Provide arXiv abstract URL |
+| PDF download timeout (>60s) | 504 Gateway Timeout | "arXiv download timed out. Please retry later." | Retry import |
+| PDF not found (404) | 422 Unprocessable Entity | "PDF not found at arXiv. Verify the paper ID is correct." | Check arXiv ID |
+| File size >100MB | 422 Unprocessable Entity | "PDF file too large (max 100 MB)" | N/A (out of scope) |
+| Invalid Content-Type | 422 Unprocessable Entity | "Downloaded file is not a valid PDF" | Contact support |
+
+### Duplicate Detection
+
+**MVP Decision**: No duplicate detection. Same URL imported twice creates separate `Paper` entries.
+
+**Rationale**: Simplicity (YAGNI). Duplicate handling adds complexity (URL normalization, user confirmation UI). Users can manually manage duplicates via delete operation.
+
+**Future**: Add `UNIQUE INDEX` on normalized `source_url` and return 409 Conflict if duplicate detected.
+
+### Example API Request
+
+```json
+POST /api/papers/import
+Content-Type: multipart/form-data
+
+{
+  "url": "https://arxiv.org/abs/2212.14578",
+  "title": "Constitutional AI: Harmlessness from AI Feedback"
+}
+```
+
+**Validation**:
+- `url` field MUST match arXiv pattern
+- `title` field MUST be non-empty string (max 500 chars)
+
+### Implementation Notes
+
+**Backend validation** (in `backend/src/api/papers/import.rs`):
+```rust
+fn validate_arxiv_url(url: &str) -> Result<String, ValidationError> {
+    let re = Regex::new(r"^https://(www\.)?arxiv\.org/abs/\d{4}\.\d{4,5}(v\d+)?$").unwrap();
+    if !re.is_match(url) {
+        return Err(ValidationError::InvalidArxivUrl);
+    }
+    Ok(url.replace("/abs/", "/pdf/") + ".pdf")
+}
+```
+
+**Frontend validation** (in `frontend/src/components/papers/PaperImport.tsx`):
+- Real-time URL validation (show error message if non-arXiv URL pasted)
+- Disable submit button until valid arXiv URL + title provided
+- Display example placeholder: `"https://arxiv.org/abs/2212.14578"`
+
+### Scale Considerations (Explicitly Out of Scope)
+
+**Not implemented in MVP**:
+- arXiv API integration for metadata (title, authors, abstract)
+- Rate limiting (arXiv allows reasonable personal use)
+- Caching of downloaded PDFs by arXiv ID (prevent re-download)
+- Support for other sources (OpenReview, ACL Anthology, PubMed)
+
+**Decision**: Validate arXiv-only workflow first. Add other sources only if user demand exists post-MVP.
+
+---
+
 ## Migration Strategy
 
 ### Initial Schema Migration
