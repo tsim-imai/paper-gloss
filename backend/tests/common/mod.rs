@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -10,7 +10,7 @@ pub struct TestServer {
 }
 
 impl TestServer {
-    pub fn spawn() -> anyhow::Result<Self> {
+    pub async fn spawn() -> anyhow::Result<Self> {
         // Pick a free port
         let port = portpicker::pick_unused_port().expect("no free ports available");
         let host = "127.0.0.1";
@@ -25,7 +25,7 @@ impl TestServer {
         anyhow::ensure!(bin.exists(), "backend binary not found at {:?}", bin);
 
         // Spawn server
-        let mut child = Command::new(bin)
+        let child = Command::new(bin)
             .env("HOST", host)
             .env("PORT", port.to_string())
             .env("DATABASE_URL", database_url)
@@ -36,7 +36,7 @@ impl TestServer {
 
         let base = format!("http://{}:{}", host, port);
         // Wait for /health to be ready
-        wait_for_health(&base, Duration::from_secs(10))?;
+        wait_for_health(&base, Duration::from_secs(10)).await?;
 
         Ok(Self { base_url: base, child, _db_path: db_path })
     }
@@ -50,21 +50,18 @@ impl Drop for TestServer {
     }
 }
 
-fn wait_for_health(base: &str, timeout: Duration) -> anyhow::Result<()> {
+async fn wait_for_health(base: &str, timeout: Duration) -> anyhow::Result<()> {
     let url = format!("{}/health", base);
     let start = Instant::now();
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        loop {
-            if start.elapsed() > timeout {
-                anyhow::bail!("server did not become ready at {} within {:?}", url, timeout)
-            }
-            match reqwest::get(&url).await {
-                Ok(resp) if resp.status().as_u16() == 200 => return Ok(()),
-                _ => tokio::time::sleep(Duration::from_millis(200)).await,
-            }
+    loop {
+        if start.elapsed() > timeout {
+            anyhow::bail!("server did not become ready at {} within {:?}", url, timeout)
         }
-    })
+        match reqwest::get(&url).await {
+            Ok(resp) if resp.status().as_u16() == 200 => return Ok(()),
+            _ => tokio::time::sleep(Duration::from_millis(200)).await,
+        }
+    }
 }
 
 fn resolve_binary_path() -> PathBuf {
@@ -87,4 +84,3 @@ fn resolve_binary_path() -> PathBuf {
 pub fn api(base: &str) -> String {
     format!("{}/api", base)
 }
-

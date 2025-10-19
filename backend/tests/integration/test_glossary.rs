@@ -3,7 +3,7 @@ use crate::common::*;
 /// US3: Glossary CRUD workflow
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn t078_integration_glossary_crud_workflow() {
-    let srv = TestServer::spawn().expect("failed to start test server");
+    let srv = TestServer::spawn().await.expect("failed to start test server");
     let client = reqwest::Client::new();
 
     // Create term

@@ -2,7 +2,7 @@ use crate::common::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn t019_contract_paper_list_returns_200_with_pagination() {
-    let srv = TestServer::spawn().expect("failed to start test server");
+    let srv = TestServer::spawn().await.expect("failed to start test server");
     let url = format!("{}/papers?page=1&limit=20", api(&srv.base_url));
     let resp = reqwest::get(&url).await.unwrap();
 

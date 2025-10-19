@@ -2,7 +2,7 @@ use crate::common::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn t073_contract_post_terms_create_returns_201() {
-    let srv = TestServer::spawn().expect("failed to start test server");
+    let srv = TestServer::spawn().await.expect("failed to start test server");
     let url = format!("{}/terms", api(&srv.base_url));
     let body = serde_json::json!({
         "lemma_en": "neural network",
