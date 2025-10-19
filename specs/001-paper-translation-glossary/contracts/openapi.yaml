@@ -1,0 +1,895 @@
+openapi: 3.0.3
+info:
+  title: Paper Translation & Glossary API
+  description: |
+    REST API for importing English ML papers, translating to Japanese via LLM,
+    extracting ML terms, and managing a personal glossary.
+
+    **Constitution Compliance**: This API follows the paper-gloss constitution v1.0.0
+    principles including Simplicity-First, Test-First Development, UI/UX-Centric Design,
+    Modular Monolith Architecture, and Data Integrity & User Control.
+
+    **Backend**: Rust (Axum + utoipa-axum + SQLx)
+
+    **Generated**: 2025-10-19
+  version: 1.0.0
+  contact:
+    name: Paper Gloss Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+tags:
+  - name: Papers
+    description: Paper import, processing, and retrieval
+  - name: Chunks
+    description: Translation chunks and retry operations
+  - name: Terms
+    description: Glossary term management (CRUD, search, merge)
+  - name: Definitions
+    description: Term definition generation and updates
+  - name: Occurrences
+    description: Term occurrence tracking in papers
+
+paths:
+  # ============================================================================
+  # Papers API
+  # ============================================================================
+
+  /papers/import:
+    post:
+      tags: [Papers]
+      summary: Import a paper from file or URL
+      description: |
+        Imports a PDF paper from either a file upload or a public URL.
+        Creates a new Paper entity and triggers async processing pipeline.
+
+        **Requirements**: FR-001, FR-002, FR-003, FR-004
+      operationId: importPaper
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file (if uploading from filesystem)
+                url:
+                  type: string
+                  format: uri
+                  description: PDF download URL (if importing from web)
+                title:
+                  type: string
+                  description: Optional paper title (extracted from PDF metadata if omitted)
+              oneOf:
+                - required: [file]
+                - required: [url]
+      responses:
+        '201':
+          description: Paper imported successfully, processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaperImportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: PDF parsing failed or corrupted file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /papers/{id}/process:
+    post:
+      tags: [Papers]
+      summary: Trigger async processing for a paper
+      description: |
+        Starts or retries the full processing pipeline: extraction → translation → term extraction → definitions.
+        Non-blocking. Returns immediately with processing status.
+
+        **Requirements**: FR-031, FR-032
+      operationId: processPaper
+      parameters:
+        - $ref: '#/components/parameters/PaperId'
+      responses:
+        '202':
+          description: Processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /papers/{id}:
+    get:
+      tags: [Papers]
+      summary: Get paper details and processing status
+      description: |
+        Retrieves paper metadata, processing status, and chunk count.
+
+        **Requirements**: FR-004, FR-031
+      operationId: getPaper
+      parameters:
+        - $ref: '#/components/parameters/PaperId'
+      responses:
+        '200':
+          description: Paper details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Paper'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /papers:
+    get:
+      tags: [Papers]
+      summary: List all papers
+      description: |
+        Returns a list of all imported papers with pagination.
+        Optionally filter by status.
+      operationId: listPapers
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PaperStatus'
+          description: Filter by processing status
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of papers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  papers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Paper'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+
+  /papers/{id}/translation:
+    get:
+      tags: [Papers]
+      summary: Get translated text for a paper
+      description: |
+        Returns all translated chunks for a paper, ordered by index.
+        Each chunk includes highlighted term markers.
+
+        **Requirements**: FR-024, FR-025, FR-030
+      operationId: getTranslation
+      parameters:
+        - $ref: '#/components/parameters/PaperId'
+      responses:
+        '200':
+          description: Translated chunks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paper_id:
+                    type: string
+                    format: uuid
+                  chunks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TranslatedChunk'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # Chunks API
+  # ============================================================================
+
+  /chunks/{id}/retry:
+    post:
+      tags: [Chunks]
+      summary: Retry translation for a failed chunk
+      description: |
+        Retries translation for a single chunk without reprocessing the entire paper.
+
+        **Requirements**: FR-013, FR-032
+      operationId: retryChunk
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Chunk retry started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Chunk'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # Terms API
+  # ============================================================================
+
+  /terms:
+    get:
+      tags: [Terms]
+      summary: Search and list terms
+      description: |
+        Searches terms in both English and Japanese with normalization.
+        Supports fuzzy matching for katakana, hyphens, singular/plural.
+
+        **Requirements**: FR-022, FR-023
+      operationId: searchTerms
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query (English or Japanese)
+        - name: lang
+          in: query
+          schema:
+            type: string
+            enum: [en, ja, both]
+            default: both
+          description: Search language
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [alphabetical, frequency, recent]
+            default: alphabetical
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: List of matching terms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  terms:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Term'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+
+    post:
+      tags: [Terms]
+      summary: Manually add a new term
+      description: |
+        Creates a new term entry in the glossary.
+
+        **Requirements**: FR-022
+      operationId: createTerm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTermRequest'
+      responses:
+        '201':
+          description: Term created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Term'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Term with same slug already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /terms/{id}:
+    get:
+      tags: [Terms]
+      summary: Get term details with definition and variants
+      description: |
+        Returns full term details including definition, variants, and occurrence count.
+      operationId: getTerm
+      parameters:
+        - $ref: '#/components/parameters/TermId'
+      responses:
+        '200':
+          description: Term details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TermDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Terms]
+      summary: Update term metadata
+      description: |
+        Updates term fields (lemma_en, lemma_ja, reading_kana, tags, note).
+        Does not update definition (use /terms/{id}/define for that).
+
+        **Requirements**: FR-022
+      operationId: updateTerm
+      parameters:
+        - $ref: '#/components/parameters/TermId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTermRequest'
+      responses:
+        '200':
+          description: Term updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Term'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Terms]
+      summary: Delete a term
+      description: |
+        Deletes a term and all associated data (variants, definition, occurrences).
+        Cascade delete enforced by database.
+
+        **Requirements**: FR-022
+      operationId: deleteTerm
+      parameters:
+        - $ref: '#/components/parameters/TermId'
+      responses:
+        '204':
+          description: Term deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /terms/merge:
+    post:
+      tags: [Terms]
+      summary: Merge duplicate terms
+      description: |
+        Merges two term entries into one canonical term.
+        Requires explicit user confirmation via request body.
+        All variants and occurrences are transferred to the target term.
+
+        **Requirements**: FR-020
+      operationId: mergeTerms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id, target_id, confirmed]
+              properties:
+                source_id:
+                  type: string
+                  format: uuid
+                  description: Term to be merged (will be deleted)
+                target_id:
+                  type: string
+                  format: uuid
+                  description: Canonical term to merge into
+                confirmed:
+                  type: boolean
+                  description: Must be true (explicit user confirmation)
+      responses:
+        '200':
+          description: Merge completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TermDetails'
+        '400':
+          description: Confirmation not provided or same term IDs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # Definitions API
+  # ============================================================================
+
+  /terms/{id}/define:
+    post:
+      tags: [Definitions]
+      summary: Generate or regenerate AI definition for a term
+      description: |
+        Calls LLM to create a new 2-3 sentence Japanese definition.
+        Updates existing definition if present.
+
+        **Requirements**: FR-021
+      operationId: generateDefinition
+      parameters:
+        - $ref: '#/components/parameters/TermId'
+      responses:
+        '200':
+          description: Definition generated/updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Definition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: LLM API unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ============================================================================
+  # Occurrences API
+  # ============================================================================
+
+  /occurrences:
+    get:
+      tags: [Occurrences]
+      summary: List term occurrences
+      description: |
+        Returns term occurrences filtered by paper_id, term_id, or both.
+        Used for navigating from glossary to specific paper locations.
+      operationId: listOccurrences
+      parameters:
+        - name: paper_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: term_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of occurrences
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Occurrence'
+        '400':
+          description: No filter provided (must specify paper_id or term_id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# ==============================================================================
+# Components
+# ==============================================================================
+
+components:
+  parameters:
+    PaperId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Paper UUID
+
+    TermId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Term UUID
+
+  responses:
+    BadRequest:
+      description: Invalid request (validation error)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    # ============================================================================
+    # Paper Schemas
+    # ============================================================================
+
+    PaperStatus:
+      type: string
+      enum: [pending, processing, completed, failed]
+      description: Paper processing status
+
+    Paper:
+      type: object
+      required: [id, title, file_path, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        source_url:
+          type: string
+          format: uri
+          nullable: true
+        file_path:
+          type: string
+        status:
+          $ref: '#/components/schemas/PaperStatus'
+        chunk_count:
+          type: integer
+          description: Total number of chunks (null if not yet extracted)
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PaperImportResponse:
+      type: object
+      required: [paper_id, status]
+      properties:
+        paper_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PaperStatus'
+        message:
+          type: string
+          example: "Paper imported successfully. Processing started."
+
+    ProcessingStatus:
+      type: object
+      required: [paper_id, status, progress]
+      properties:
+        paper_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PaperStatus'
+        progress:
+          type: object
+          properties:
+            extraction:
+              type: string
+              enum: [pending, in_progress, completed, failed]
+            translation:
+              type: object
+              properties:
+                total_chunks:
+                  type: integer
+                completed_chunks:
+                  type: integer
+                failed_chunks:
+                  type: integer
+            term_extraction:
+              type: string
+              enum: [pending, in_progress, completed, failed]
+            definitions:
+              type: object
+              properties:
+                total_terms:
+                  type: integer
+                completed_definitions:
+                  type: integer
+
+    # ============================================================================
+    # Chunk Schemas
+    # ============================================================================
+
+    Chunk:
+      type: object
+      required: [id, paper_id, index, src_text, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        paper_id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+        src_text:
+          type: string
+        trans_html:
+          type: string
+          nullable: true
+        content_hash:
+          type: string
+        token_count:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TranslatedChunk:
+      type: object
+      required: [chunk_id, index, trans_html]
+      properties:
+        chunk_id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+        trans_html:
+          type: string
+          description: Japanese translation with term highlight markers
+
+    # ============================================================================
+    # Term Schemas
+    # ============================================================================
+
+    Term:
+      type: object
+      required: [id, slug, lemma_en, lemma_ja, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          example: "neural-network"
+        lemma_en:
+          type: string
+          example: "neural network"
+        lemma_ja:
+          type: string
+          example: "ニューラルネットワーク"
+        reading_kana:
+          type: string
+          example: "にゅーらるねっとわーく"
+          nullable: true
+        pos:
+          type: string
+          example: "noun"
+          nullable: true
+        tags:
+          type: string
+          example: "machine-learning,deep-learning"
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TermDetails:
+      allOf:
+        - $ref: '#/components/schemas/Term'
+        - type: object
+          properties:
+            definition:
+              $ref: '#/components/schemas/Definition'
+            variants:
+              type: array
+              items:
+                $ref: '#/components/schemas/TermVariant'
+            occurrence_count:
+              type: integer
+              description: Total occurrences across all papers
+
+    TermVariant:
+      type: object
+      required: [id, term_id, lang, surface, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        term_id:
+          type: string
+          format: uuid
+        lang:
+          type: string
+          enum: [en, ja]
+        surface:
+          type: string
+          example: "neural-network"
+        created_at:
+          type: string
+          format: date-time
+
+    CreateTermRequest:
+      type: object
+      required: [lemma_en, lemma_ja]
+      properties:
+        lemma_en:
+          type: string
+          example: "neural network"
+        lemma_ja:
+          type: string
+          example: "ニューラルネットワーク"
+        reading_kana:
+          type: string
+          example: "にゅーらるねっとわーく"
+        pos:
+          type: string
+        tags:
+          type: string
+        note:
+          type: string
+        variants:
+          type: array
+          items:
+            type: object
+            required: [lang, surface]
+            properties:
+              lang:
+                type: string
+                enum: [en, ja]
+              surface:
+                type: string
+
+    UpdateTermRequest:
+      type: object
+      properties:
+        lemma_en:
+          type: string
+        lemma_ja:
+          type: string
+        reading_kana:
+          type: string
+        pos:
+          type: string
+        tags:
+          type: string
+        note:
+          type: string
+
+    # ============================================================================
+    # Definition Schema
+    # ============================================================================
+
+    Definition:
+      type: object
+      required: [id, term_id, lang, text, provider, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        term_id:
+          type: string
+          format: uuid
+        lang:
+          type: string
+          enum: [ja]
+          default: ja
+        text:
+          type: string
+          example: "複数の層で構成されたニューロンの集合体。入力データから特徴を学習し、パターン認識や予測を行う機械学習モデルの一種。"
+        provider:
+          type: string
+          example: "gpt-4"
+          description: LLM model name or "manual"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ============================================================================
+    # Occurrence Schema
+    # ============================================================================
+
+    Occurrence:
+      type: object
+      required: [id, term_id, paper_id, chunk_id, start_pos, end_pos, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        term_id:
+          type: string
+          format: uuid
+        paper_id:
+          type: string
+          format: uuid
+        chunk_id:
+          type: string
+          format: uuid
+        start_pos:
+          type: integer
+        end_pos:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    # ============================================================================
+    # Error Schema
+    # ============================================================================
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "BadRequest"
+        message:
+          type: string
+          example: "Invalid paper ID format"
+        details:
+          type: object
+          additionalProperties: true
