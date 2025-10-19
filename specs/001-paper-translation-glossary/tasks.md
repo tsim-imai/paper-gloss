@@ -25,14 +25,14 @@
 
 **Purpose**: Project initialization and basic structure per plan.md and quickstart.md
 
-- [ ] T001 Create backend directory structure (src/models, src/services, src/api, tests/, migrations/) per plan.md:120-131
-- [ ] T002 Initialize Rust backend with Cargo.toml dependencies (axum, utoipa-axum, sqlx, reqwest, pdf-extract) per research.md:268-270
-- [ ] T003 [P] Create frontend directory structure (src/components, src/pages, src/services, tests/) per plan.md:139-148
-- [ ] T004 [P] Initialize TypeScript frontend with package.json dependencies (vite, react, react-router, react-pdf, vitest) per research.md:268-270
-- [ ] T005 [P] Configure Vite proxy for backend API in frontend/vite.config.ts per quickstart.md:173-188
-- [ ] T006 [P] Setup linting and formatting (Cargo clippy, prettier/eslint) per constitution Principle I
-- [ ] T007 [P] Create .env template files for backend and frontend per quickstart.md:81-97, 164-171
-- [ ] T008 [P] Create artifacts/ directory structure (papers/{paper_id}/source.pdf, text/, translations/, terms/, llm_logs/) per plan.md:151-156
+- [X] T001 Create backend directory structure (src/models, src/services, src/api, tests/, migrations/) per plan.md:120-131
+- [X] T002 Initialize Rust backend with Cargo.toml dependencies (axum, utoipa-axum, sqlx, reqwest, pdf-extract) per research.md:268-270
+- [X] T003 [P] Create frontend directory structure (src/components, src/pages, src/services, tests/) per plan.md:139-148
+- [X] T004 [P] Initialize TypeScript frontend with package.json dependencies (vite, react, react-router, react-pdf, vitest) per research.md:268-270
+- [X] T005 [P] Configure Vite proxy for backend API in frontend/vite.config.ts per quickstart.md:173-188
+- [X] T006 [P] Setup linting and formatting (Cargo clippy, prettier/eslint) per constitution Principle I
+- [X] T007 [P] Create .env template files for backend and frontend per quickstart.md:81-97, 164-171
+- [X] T008 [P] Create artifacts/ directory structure (papers/{paper_id}/source.pdf, text/, translations/, terms/, llm_logs/) per plan.md:151-156
 
 ---
 
@@ -42,14 +42,14 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T009 Create initial SQLite schema migration (001_initial_schema.sql) with all 6 entities per data-model.md:330-340
-- [ ] T010 Setup SQLx database connection pool in backend/src/main.rs per research.md:183-206
-- [ ] T011 [P] Implement LLM client module in backend/src/services/llm/client.rs (OpenAI-compatible API) per spec.md:FR-011, FR-014-016
-- [ ] T012 [P] Implement LLM request logging to artifacts/ per spec.md:FR-016 and constitution Principle V
-- [ ] T013 [P] Configure Axum web server with utoipa OpenAPI generation in backend/src/main.rs per research.md:153-173
-- [ ] T014 [P] Setup error handling middleware in backend/src/api/error.rs per plan.md:282
-- [ ] T015 [P] Setup logging infrastructure (RUST_LOG) in backend/src/main.rs per quickstart.md:96
-- [ ] T016 [P] Create API client service in frontend/src/services/api.ts using @tanstack/react-query per plan.md:161
+- [X] T009 Create initial SQLite schema migration (001_initial_schema.sql) with all 6 entities per data-model.md:330-340
+- [X] T010 Setup SQLx database connection pool in backend/src/main.rs per research.md:183-206
+- [X] T011 [P] Implement LLM client module in backend/src/services/llm/client.rs (OpenAI-compatible API) per spec.md:FR-011, FR-014-016
+- [X] T012 [P] Implement LLM request logging to artifacts/ per spec.md:FR-016 and constitution Principle V
+- [X] T013 [P] Configure Axum web server with utoipa OpenAPI generation in backend/src/main.rs per research.md:153-173
+- [X] T014 [P] Setup error handling middleware in backend/src/api/error.rs per plan.md:282
+- [X] T015 [P] Setup logging infrastructure (RUST_LOG) in backend/src/main.rs per quickstart.md:96
+- [X] T016 [P] Create API client service in frontend/src/services/api.ts using @tanstack/react-query per plan.md:161
 - [ ] T017 [P] Run quickstart.md validation: verify backend builds, migrations run, frontend dev server starts per quickstart.md:204-220
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
@@ -80,34 +80,34 @@
 
 **Models & Database** (run in parallel):
 
-- [ ] T027 [P] [US1] Create Paper model in backend/src/models/paper.rs with SQLx queries per data-model.md:44-78
-- [ ] T028 [P] [US1] Create Chunk model in backend/src/models/chunk.rs with SQLx queries per data-model.md:82-115
+- [X] T027 [P] [US1] Create Paper model in backend/src/models/paper.rs with SQLx queries per data-model.md:44-78
+- [X] T028 [P] [US1] Create Chunk model in backend/src/models/chunk.rs with SQLx queries per data-model.md:82-115
 
 **Services** (depends on T027, T028):
 
-- [ ] T029 [US1] Implement PDF extraction service in backend/src/services/pdf/extraction.rs using pdf-extract per spec.md:FR-006-007, research.md:62-115
-- [ ] T030 [US1] Implement text chunking service in backend/src/services/pdf/chunking.rs per spec.md:FR-008-010
-- [ ] T031 [US1] Implement translation service in backend/src/services/llm/translation.rs using LLM client per spec.md:FR-011-016
-- [ ] T032 [US1] Implement paper processing orchestrator in backend/src/services/paper_processor.rs (coordinates extraction → chunking → translation) per spec.md:FR-031-033
-- [ ] T033 [US1] Implement chunk retry logic in backend/src/services/chunk_retry.rs per spec.md:FR-032
+- [X] T029 [US1] Implement PDF extraction service in backend/src/services/pdf/extraction.rs using pdf-extract per spec.md:FR-006-007, research.md:62-115
+- [X] T030 [US1] Implement text chunking service in backend/src/services/pdf/chunking.rs per spec.md:FR-008-010
+- [X] T031 [US1] Implement translation service in backend/src/services/translation.rs using LLM client per spec.md:FR-011-016
+- [X] T032 [US1] Implement paper processing orchestrator in backend/src/services/paper_processor.rs (coordinates extraction → chunking → translation) per spec.md:FR-031-033
+- [X] T033 [US1] Implement chunk retry logic in backend/src/services/paper_processor.rs per spec.md:FR-032
 
 **API Endpoints** (depends on T029-T033):
 
-- [ ] T034 [P] [US1] Implement POST /papers/import endpoint in backend/src/api/papers/import.rs per contracts/openapi.yaml:42-89
-- [ ] T035 [P] [US1] Implement GET /papers endpoint in backend/src/api/papers/list.rs per contracts/openapi.yaml:136-180
-- [ ] T036 [P] [US1] Implement GET /papers/{id} endpoint in backend/src/api/papers/detail.rs per contracts/openapi.yaml:115-134
-- [ ] T037 [P] [US1] Implement GET /papers/{id}/translation endpoint in backend/src/api/papers/translation.rs per contracts/openapi.yaml:182-214
-- [ ] T038 [P] [US1] Implement POST /papers/{id}/process endpoint in backend/src/api/papers/process.rs per contracts/openapi.yaml:91-113
-- [ ] T039 [P] [US1] Implement POST /chunks/{id}/retry endpoint in backend/src/api/chunks/retry.rs per contracts/openapi.yaml:216-244
+- [X] T034 [P] [US1] Implement POST /papers/import endpoint in backend/src/api/papers/import.rs per contracts/openapi.yaml:42-89
+- [X] T035 [P] [US1] Implement GET /papers endpoint in backend/src/api/papers/list.rs per contracts/openapi.yaml:136-180
+- [X] T036 [P] [US1] Implement GET /papers/{id} endpoint in backend/src/api/papers/detail.rs per contracts/openapi.yaml:115-134
+- [X] T037 [P] [US1] Implement GET /papers/{id}/translation endpoint in backend/src/api/papers/translation.rs per contracts/openapi.yaml:182-214
+- [X] T038 [P] [US1] Implement POST /papers/{id}/process endpoint in backend/src/api/papers/process.rs per contracts/openapi.yaml:91-113
+- [X] T039 [P] [US1] Implement POST /chunks/{id}/retry endpoint in backend/src/api/chunks/retry.rs per contracts/openapi.yaml:216-244
 
 **Frontend Components** (can run in parallel with backend endpoints):
 
-- [ ] T040 [P] [US1] Create PaperImport component in frontend/src/components/papers/PaperImport.tsx (file upload + URL input) per spec.md:20-22
-- [ ] T041 [P] [US1] Create PaperList component in frontend/src/components/papers/PaperList.tsx per spec.md:19
-- [ ] T042 [P] [US1] Create ProcessingStatus component in frontend/src/components/papers/ProcessingStatus.tsx (progress indicators) per spec.md:22, FR-031
-- [ ] T043 [P] [US1] Create TranslationView component in frontend/src/components/translation/TranslationView.tsx per spec.md:23
-- [ ] T044 [P] [US1] Create PDFViewer component in frontend/src/components/pdf/PDFViewer.tsx using react-pdf per spec.md:24, FR-029
-- [ ] T045 [US1] Create PaperPage route in frontend/src/pages/PaperPage.tsx (side-by-side layout) per spec.md:24
+- [X] T040 [P] [US1] Create PaperImport component in frontend/src/components/papers/PaperImport.tsx (file upload + URL input) per spec.md:20-22
+- [X] T041 [P] [US1] Create PaperList component in frontend/src/components/papers/PaperList.tsx per spec.md:19
+- [X] T042 [P] [US1] Create ProcessingStatus component in frontend/src/components/papers/ProcessingStatus.tsx (progress indicators) per spec.md:22, FR-031
+- [X] T043 [P] [US1] Create TranslationView component in frontend/src/components/translation/TranslationView.tsx per spec.md:23
+- [X] T044 [P] [US1] Create PDFViewer component in frontend/src/components/pdf/PDFViewer.tsx using react-pdf per spec.md:24, FR-029
+- [X] T045 [US1] Create PaperPage route in frontend/src/pages/PaperPage.tsx (side-by-side layout) per spec.md:24
 
 **Validation & Error Handling**:
 

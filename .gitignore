@@ -58,3 +58,10 @@ temp/
 # PDF files (if generated during development)
 *.pdf
 !docs/**/*.pdf  # Keep documentation PDFs
+
+# Project-specific artifacts (paper-gloss)
+artifacts/
+*.db
+*.db-shm
+*.db-wal
+.sqlx/

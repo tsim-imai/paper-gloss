@@ -1,0 +1,71 @@
+[package]
+name = "paper-gloss"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["multipart"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+tokio = { version = "1", features = ["full"] }
+
+# OpenAPI generation
+utoipa = { version = "4", features = ["axum_extras", "uuid"] }
+utoipa-swagger-ui = { version = "6", features = ["axum"] }
+
+# Database (SQLite with compile-time checking)
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "uuid", "chrono", "migrate"] }
+
+# HTTP client for LLM API
+reqwest = { version = "0.11", features = ["json"] }
+
+# PDF extraction
+pdf-extract = "0.7"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# UUID generation
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Environment variables
+dotenvy = "0.15"
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Async traits
+async-trait = "0.1"
+
+# Regular expressions
+regex = "1"
+
+# Hashing
+sha2 = "0.10"
+
+# Async/futures
+futures = "0.3"
+
+# Multipart form data
+multer = "3"
+
+[dev-dependencies]
+# Testing
+tower = { version = "0.4", features = ["util"] }
+http-body-util = "0.1"
+portpicker = "0.1"
+tempfile = "3"
+
+# Enable multipart support for reqwest in tests (unified feature set)
+reqwest = { version = "0.11", features = ["json", "multipart"] }
