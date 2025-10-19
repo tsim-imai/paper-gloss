@@ -44,26 +44,43 @@ export interface Term {
 }
 
 export interface Definition {
+  text: string
+  provider: string
+}
+
+export interface TermVariant {
+  lang: string
+  surface: string
+}
+
+export interface TermDetail {
   id: string
-  term_id: string
-  source: string
-  definition_text_en: string
-  definition_text_ja: string
-  context?: string
+  slug: string
+  lemma_en: string
+  lemma_ja: string
+  reading_kana?: string
+  pos?: string
+  tags?: string
+  note?: string
+  definition?: Definition
+  variants: TermVariant[]
   created_at: string
+  updated_at: string
 }
 
 export interface Occurrence {
   id: string
+  term_id: string
   paper_id: string
   chunk_id: string
-  term_id: string
-  text_en: string
-  text_ja?: string
-  context_before: string
-  context_after: string
-  position: number
+  start_pos: number
+  end_pos: number
   created_at: string
+}
+
+export interface OccurrencesListResponse {
+  occurrences: Occurrence[]
+  total: number
 }
 
 export interface PaginatedResponse<T> {

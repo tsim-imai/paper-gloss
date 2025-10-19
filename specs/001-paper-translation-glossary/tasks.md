@@ -157,11 +157,11 @@
 
 **Frontend Components** (can run in parallel):
 
-- [ ] T065 [P] [US2] Create TermHighlight component in frontend/src/components/translation/TermHighlight.tsx (highlighting logic) per spec.md:38, FR-025
-- [ ] T066 [P] [US2] Create TermTooltip component in frontend/src/components/translation/TermTooltip.tsx (<100ms latency) per spec.md:39, FR-027-028
-- [ ] T067 [US2] Integrate TermHighlight and TermTooltip into TranslationView component per spec.md:37-43
-- [ ] T068 [US2] Implement tooltip sticky mode (click to keep open) in TermTooltip component per spec.md:40
-- [ ] T069 [US2] Add occurrence synchronization (highlight all instances) in TermHighlight component per spec.md:41, FR-030
+- [X] T065 [P] [US2] Create TermHighlight component in frontend/src/components/translation/TermHighlight.tsx (highlighting logic) per spec.md:38, FR-025
+- [X] T066 [P] [US2] Create TermTooltip component in frontend/src/components/translation/TermTooltip.tsx (<100ms latency) per spec.md:39, FR-027-028
+- [X] T067 [US2] Integrate TermHighlight and TermTooltip into TranslationView component per spec.md:37-43
+- [X] T068 [US2] Implement tooltip sticky mode (click to keep open) in TermTooltip component per spec.md:40
+- [X] T069 [US2] Add occurrence synchronization (highlight all instances) in TermHighlight component per spec.md:41, FR-030
 
 **Performance Optimization**:
 

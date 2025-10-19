@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../services/api'
-import { Chunk } from '../types'
+import { Chunk, OccurrencesListResponse } from '../types'
+import TermHighlight from './translation/TermHighlight'
+import TermTooltip from './translation/TermTooltip'
 
 interface TranslationViewProps {
   paperId: string
@@ -10,6 +12,9 @@ interface TranslationViewProps {
 export default function TranslationView({ paperId }: TranslationViewProps) {
   const [showOriginal, setShowOriginal] = useState(true)
   const [showTranslation, setShowTranslation] = useState(true)
+  const [hoveredTermId, setHoveredTermId] = useState<string | null>(null)
+  const [pinnedTermId, setPinnedTermId] = useState<string | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const queryClient = useQueryClient()
 
   const { data, isLoading, error } = useQuery({
@@ -20,6 +25,15 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
     },
   })
 
+  const { data: occurrencesData } = useQuery({
+    queryKey: ['occurrences', paperId],
+    queryFn: async () => {
+      const response = await apiClient.listOccurrences(paperId)
+      return response.data as OccurrencesListResponse
+    },
+    enabled: !!paperId,
+  })
+
   const retryMutation = useMutation({
     mutationFn: (chunkId: string) => apiClient.retryChunk(chunkId),
     onSuccess: () => {
@@ -27,6 +41,40 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
       queryClient.invalidateQueries({ queryKey: ['paper', paperId] })
     },
   })
+
+  // Handle ESC key to close pinned tooltip
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && pinnedTermId) {
+        setPinnedTermId(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [pinnedTermId])
+
+  // Event handlers
+  const handleTermHover = (termId: string | null, event: React.MouseEvent) => {
+    if (pinnedTermId) return // Don't show hover tooltip when pinned
+    setHoveredTermId(termId)
+    if (termId) {
+      setTooltipPosition({ x: event.clientX, y: event.clientY })
+    }
+  }
+
+  const handleTermClick = (termId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+    setPinnedTermId(termId)
+    setHoveredTermId(null)
+    setTooltipPosition({ x: event.clientX, y: event.clientY })
+  }
+
+  const handleCloseTooltip = () => {
+    setPinnedTermId(null)
+  }
+
+  const occurrences = occurrencesData?.occurrences || []
+  const activeTermId = hoveredTermId || pinnedTermId
 
   if (isLoading) {
     return <div style={{ textAlign: 'center', padding: '2rem' }}>Loading translation...</div>
@@ -172,13 +220,14 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
                   Translation
                 </div>
                 {chunk.translated_text ? (
-                  <div style={{
-                    lineHeight: '1.8',
-                    whiteSpace: 'pre-wrap',
-                    color: '#333'
-                  }}>
-                    {chunk.translated_text}
-                  </div>
+                  <TermHighlight
+                    text={chunk.translated_text}
+                    chunkId={chunk.id}
+                    occurrences={occurrences}
+                    highlightedTermId={activeTermId || undefined}
+                    onTermHover={handleTermHover}
+                    onTermClick={handleTermClick}
+                  />
                 ) : (
                   <div style={{ fontStyle: 'italic', color: '#999' }}>
                     {chunk.status === 'pending' ? 'Translation pending...' : 'Translation failed'}
@@ -204,6 +253,16 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
           </div>
         ))}
       </div>
+
+      {/* Tooltip overlay */}
+      {activeTermId && (
+        <TermTooltip
+          termId={activeTermId}
+          position={tooltipPosition}
+          isPinned={!!pinnedTermId}
+          onClose={handleCloseTooltip}
+        />
+      )}
     </div>
   )
 }
