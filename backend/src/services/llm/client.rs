@@ -7,11 +7,12 @@ use tokio::sync::Semaphore;
 use tracing::{debug, error};
 
 /// OpenAI-compatible LLM client with concurrency limiting
+#[derive(Clone)]
 pub struct LlmClient {
     client: Client,
     api_base: String,
     api_key: String,
-    semaphore: Semaphore,
+    semaphore: std::sync::Arc<Semaphore>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,8 +55,13 @@ impl LlmClient {
             client,
             api_base,
             api_key,
-            semaphore: Semaphore::new(10), // FR-014: Max 10 concurrent requests
+            semaphore: std::sync::Arc::new(Semaphore::new(10)), // FR-014: Max 10 concurrent requests
         })
+    }
+
+    /// Get the model name being used
+    pub fn model_name(&self) -> &str {
+        "gpt-4"
     }
 
     /// Send chat completion request to LLM API

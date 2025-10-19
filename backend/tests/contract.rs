@@ -42,3 +42,8 @@ mod test_term_merge;
 #[path = "contract/test_term_define.rs"]
 mod test_term_define;
 
+#[path = "contract/test_term_merge_validation.rs"]
+mod test_term_merge_validation;
+
+#[path = "contract/test_term_list_validation.rs"]
+mod test_term_list_validation;

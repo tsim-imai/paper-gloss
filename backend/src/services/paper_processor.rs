@@ -1,6 +1,7 @@
 use crate::models::{Chunk, Paper, PaperStatus};
-use crate::services::llm::LlmLogger;
+use crate::services::llm::{LlmClient, LlmLogger};
 use crate::services::pdf::{PdfExtractor, TextChunker};
+use crate::services::terms::{TermExtractor, OccurrenceTracker};
 use crate::services::translation::TranslationService;
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
@@ -8,17 +9,19 @@ use std::path::Path;
 use tracing::{debug, info, warn};
 
 /// Paper processing orchestrator (FR-031, FR-032, FR-033)
-/// Coordinates: extraction → chunking → translation
+/// Coordinates: extraction → chunking → translation → term extraction
 pub struct PaperProcessor {
     pool: SqlitePool,
     translation_service: TranslationService,
+    llm_client: LlmClient,
 }
 
 impl PaperProcessor {
     pub fn new(pool: SqlitePool) -> Result<Self> {
         Ok(Self {
-            pool,
+            pool: pool.clone(),
             translation_service: TranslationService::new()?,
+            llm_client: LlmClient::new()?,
         })
     }
 
@@ -129,15 +132,83 @@ impl PaperProcessor {
         if translated_count == 0 {
             warn!("No chunks were successfully translated for paper {}", paper_id);
             Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await?;
-        } else if translated_count < total_count {
+            return Ok(());
+        }
+
+        // Step 6: Extract terms from source text (FR-017)
+        info!("Extracting terms from paper {}", paper_id);
+        if let Err(e) = self.extract_terms(paper_id).await {
+            warn!("Term extraction failed for paper {}: {}", paper_id, e);
+            // Continue anyway - translation is more critical
+        }
+
+        // Step 7: Track term occurrences in translated text
+        info!("Tracking term occurrences for paper {}", paper_id);
+        if let Err(e) = self.track_occurrences(paper_id).await {
+            warn!("Occurrence tracking failed for paper {}: {}", paper_id, e);
+            // Continue anyway
+        }
+
+        if translated_count < total_count {
             warn!(
                 "Partial translation: {}/{} chunks for paper {}",
                 translated_count, total_count, paper_id
             );
-            Paper::update_status(&self.pool, paper_id, PaperStatus::Completed).await?;
         } else {
             info!("Successfully processed paper {}", paper_id);
-            Paper::update_status(&self.pool, paper_id, PaperStatus::Completed).await?;
+        }
+
+        Paper::update_status(&self.pool, paper_id, PaperStatus::Completed).await?;
+
+        Ok(())
+    }
+
+    /// Extract terms from paper source text
+    async fn extract_terms(&self, paper_id: &str) -> Result<()> {
+        let term_extractor = TermExtractor::new(self.llm_client.clone(), self.pool.clone());
+
+        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+
+        // Extract terms from each chunk's source text
+        for chunk in chunks {
+            // Only extract from chunks with translations
+            if chunk.trans_html.is_some() {
+                match term_extractor.extract_terms(&chunk.src_text).await {
+                    Ok(extracted_terms) => {
+                        term_extractor
+                            .store_terms(paper_id, &chunk.id, extracted_terms, &chunk.src_text)
+                            .await?;
+                        debug!("Extracted terms from chunk {}", chunk.id);
+                    }
+                    Err(e) => {
+                        warn!("Failed to extract terms from chunk {}: {}", chunk.id, e);
+                        // Continue with other chunks
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Track term occurrences in translated chunks
+    async fn track_occurrences(&self, paper_id: &str) -> Result<()> {
+        let tracker = OccurrenceTracker::new(self.pool.clone());
+
+        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+
+        for chunk in chunks {
+            if let Some(trans_html) = &chunk.trans_html {
+                match tracker.track_occurrences(paper_id, &chunk.id, trans_html).await {
+                    Ok(count) => {
+                        debug!("Tracked {} occurrences in chunk {}", count, chunk.id);
+                    }
+                    Err(e) => {
+                        warn!("Failed to track occurrences in chunk {}: {}", chunk.id, e);
+                        // Continue with other chunks
+                    }
+                }
+            }
         }
 
         Ok(())

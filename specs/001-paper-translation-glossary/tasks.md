@@ -137,23 +137,23 @@
 
 **Models & Database** (run in parallel):
 
-- [ ] T054 [P] [US2] Create Term model in backend/src/models/term.rs with SQLx queries per data-model.md:118-154
-- [ ] T055 [P] [US2] Create TermVariant model in backend/src/models/term_variant.rs with SQLx queries per data-model.md:158-186
-- [ ] T056 [P] [US2] Create Definition model in backend/src/models/definition.rs with SQLx queries per data-model.md:189-217
-- [ ] T057 [P] [US2] Create Occurrence model in backend/src/models/occurrence.rs with SQLx queries per data-model.md:220-254
+- [X] T054 [P] [US2] Create Term model in backend/src/models/term.rs with SQLx queries per data-model.md:118-154
+- [X] T055 [P] [US2] Create TermVariant model in backend/src/models/term_variant.rs with SQLx queries per data-model.md:158-186
+- [X] T056 [P] [US2] Create Definition model in backend/src/models/definition.rs with SQLx queries per data-model.md:189-217
+- [X] T057 [P] [US2] Create Occurrence model in backend/src/models/occurrence.rs with SQLx queries per data-model.md:220-254
 
 **Services** (depends on T054-T057):
 
-- [ ] T058 [US2] Implement term extraction service in backend/src/services/terms/extraction.rs using LLM client per spec.md:FR-017
-- [ ] T059 [US2] Implement term normalization service in backend/src/services/terms/normalization.rs (English/Japanese variants) per data-model.md:294-322
-- [ ] T060 [US2] Implement definition generation service in backend/src/services/terms/definition.rs using LLM client per spec.md:FR-021
-- [ ] T061 [US2] Implement occurrence tracking service in backend/src/services/terms/occurrence_tracker.rs per data-model.md:220-254
-- [ ] T062 [US2] Integrate term extraction into paper processing orchestrator (backend/src/services/paper_processor.rs) per spec.md:FR-017
+- [X] T058 [US2] Implement term extraction service in backend/src/services/terms/extraction.rs using LLM client per spec.md:FR-017
+- [X] T059 [US2] Implement term normalization service in backend/src/services/terms/normalization.rs (English/Japanese variants) per data-model.md:294-322
+- [X] T060 [US2] Implement definition generation service in backend/src/services/terms/definition.rs using LLM client per spec.md:FR-021
+- [X] T061 [US2] Implement occurrence tracking service in backend/src/services/terms/occurrence_tracker.rs per data-model.md:220-254
+- [X] T062 [US2] Integrate term extraction into paper processing orchestrator (backend/src/services/paper_processor.rs) per spec.md:FR-017
 
 **API Endpoints** (depends on T058-T061):
 
-- [ ] T063 [P] [US2] Implement GET /terms/{id} endpoint in backend/src/api/terms/detail.rs per contracts/openapi.yaml:337-354
-- [ ] T064 [P] [US2] Implement GET /occurrences endpoint in backend/src/api/occurrences/list.rs per contracts/openapi.yaml:482-532
+- [X] T063 [P] [US2] Implement GET /terms/{id} endpoint in backend/src/api/terms/detail.rs per contracts/openapi.yaml:337-354
+- [X] T064 [P] [US2] Implement GET /occurrences endpoint in backend/src/api/occurrences/list.rs per contracts/openapi.yaml:482-532
 
 **Frontend Components** (can run in parallel):
 

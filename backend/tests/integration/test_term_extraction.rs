@@ -23,7 +23,20 @@ async fn t051_integration_term_extraction_to_highlighting() {
     let _ = client.post(&process_url).send().await.unwrap();
 
     // Terms should be listable and occurrences available
-    let terms_url = format!("{}/terms?q=network", api(&srv.base_url));
+    // 1) search terms (bilingual; normalization handled server-side)
+    let terms_url = format!("{}/terms?q=network&lang=both&sort=alphabetical&page=1&limit=50", api(&srv.base_url));
     let resp = reqwest::get(&terms_url).await.unwrap();
-    assert_eq!(resp.status().as_u16(), 200);
+    assert_eq!(resp.status().as_u16(), 200, "terms search should return 200");
+
+    // 2) pick first term id (if any) and request occurrences for this paper
+    if resp.status().is_success() {
+        let json: serde_json::Value = resp.json().await.unwrap();
+        if let Some(first) = json["terms"].as_array().and_then(|arr| arr.get(0)) {
+            if let Some(term_id) = first["id"].as_str() {
+                let occ_url = format!("{}/occurrences?paper_id={}&term_id={}", api(&srv.base_url), paper_id, term_id);
+                let occ = reqwest::get(&occ_url).await.unwrap();
+                assert_eq!(occ.status().as_u16(), 200, "occurrences list should return 200");
+            }
+        }
+    }
 }

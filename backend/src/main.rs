@@ -66,6 +66,10 @@ async fn main() -> Result<()> {
         .route("/api/papers/:id/file", get(api::papers::get_paper_file))
         // Chunks API
         .route("/api/chunks/:id/retry", axum::routing::post(api::chunks::retry_chunk))
+        // Terms API
+        .route("/api/terms/:id", get(api::terms::get_term_detail))
+        // Occurrences API
+        .route("/api/occurrences", get(api::occurrences::list_occurrences))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(pool);
