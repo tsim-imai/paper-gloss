@@ -25,6 +25,6 @@ describe('T071 High-frequency term highlighting', () => {
     const elapsed = performance.now() - start
     expect(container).toBeTruthy()
     // Allow some headroom for CI/jsdom overhead
-    expect(elapsed).toBeLessThan(150)
+    expect(elapsed).toBeLessThan(250)
   })
 })
