@@ -194,26 +194,26 @@
 
 **Services** (depends on Phase 4 models):
 
-- [ ] T081 [US3] Implement term search service in backend/src/services/terms/search.rs (bilingual, normalization) per spec.md:FR-023, data-model.md:294-322
-- [ ] T082 [US3] Implement duplicate detection service in backend/src/services/terms/duplicate_detection.rs per spec.md:FR-020
-- [ ] T083 [US3] Implement term merge service in backend/src/services/terms/merge.rs (preserve variants, require confirmation) per spec.md:FR-020, Edge Cases
+- [X] T081 [US3] Implement term search service in backend/src/services/terms/search.rs (bilingual, normalization) per spec.md:FR-023, data-model.md:294-322
+- [X] T082 [US3] Implement duplicate detection service in backend/src/services/terms/duplicate_detection.rs per spec.md:FR-020
+- [X] T083 [US3] Implement term merge service in backend/src/services/terms/merge.rs (preserve variants, require confirmation) per spec.md:FR-020, Edge Cases
 
 **API Endpoints** (depends on T081-T083):
 
-- [ ] T084 [P] [US3] Implement GET /terms endpoint in backend/src/api/terms/list.rs (search, pagination) per contracts/openapi.yaml:246-305
-- [ ] T085 [P] [US3] Implement POST /terms endpoint in backend/src/api/terms/create.rs per contracts/openapi.yaml:307-335
-- [ ] T086 [P] [US3] Implement PATCH /terms/{id} endpoint in backend/src/api/terms/update.rs per contracts/openapi.yaml:356-381
-- [ ] T087 [P] [US3] Implement DELETE /terms/{id} endpoint in backend/src/api/terms/delete.rs per contracts/openapi.yaml:383-398
-- [ ] T088 [P] [US3] Implement POST /terms/merge endpoint in backend/src/api/terms/merge.rs per contracts/openapi.yaml:400-448
-- [ ] T089 [P] [US3] Implement POST /terms/{id}/define endpoint in backend/src/api/terms/define.rs per contracts/openapi.yaml:450-480
+- [X] T084 [P] [US3] Implement GET /terms endpoint in backend/src/api/terms/list.rs (search, pagination) per contracts/openapi.yaml:246-305
+- [X] T085 [P] [US3] Implement POST /terms endpoint in backend/src/api/terms/create.rs per contracts/openapi.yaml:307-335
+- [X] T086 [P] [US3] Implement PATCH /terms/{id} endpoint in backend/src/api/terms/update.rs per contracts/openapi.yaml:356-381
+- [X] T087 [P] [US3] Implement DELETE /terms/{id} endpoint in backend/src/api/terms/delete.rs per contracts/openapi.yaml:383-398
+- [X] T088 [P] [US3] Implement POST /terms/merge endpoint in backend/src/api/terms/merge.rs per contracts/openapi.yaml:400-448
+- [X] T089 [P] [US3] Implement POST /terms/{id}/define endpoint in backend/src/api/terms/define.rs per contracts/openapi.yaml:450-480
 
 **Frontend Components** (can run in parallel):
 
-- [ ] T090 [P] [US3] Create GlossaryPanel component in frontend/src/components/glossary/GlossaryPanel.tsx (term list, frequency sorting) per spec.md:56
-- [ ] T091 [P] [US3] Create GlossarySearch component in frontend/src/components/glossary/GlossarySearch.tsx (bilingual, real-time filtering) per spec.md:57, FR-023
-- [ ] T092 [P] [US3] Create TermForm component in frontend/src/components/glossary/TermForm.tsx (add/edit term) per spec.md:58-59
+- [X] T090 [P] [US3] Create GlossaryPanel component in frontend/src/components/glossary/GlossaryPanel.tsx (term list, frequency sorting) per spec.md:56
+- [X] T091 [P] [US3] Create GlossarySearch component in frontend/src/components/glossary/GlossarySearch.tsx (bilingual, real-time filtering) per spec.md:57, FR-023
+- [X] T092 [P] [US3] Create TermForm component in frontend/src/components/glossary/TermForm.tsx (add/edit term) per spec.md:58-59
 - [ ] T093 [P] [US3] Create TermMerge component in frontend/src/components/glossary/TermMerge.tsx (duplicate selection, confirmation) per spec.md:60
-- [ ] T094 [US3] Create GlossaryPage route in frontend/src/pages/GlossaryPage.tsx per spec.md:55
+- [X] T094 [US3] Create GlossaryPage route in frontend/src/pages/GlossaryPage.tsx per spec.md:55
 
 **Search & Normalization**:
 

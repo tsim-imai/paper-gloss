@@ -67,7 +67,10 @@ async fn main() -> Result<()> {
         // Chunks API
         .route("/api/chunks/:id/retry", axum::routing::post(api::chunks::retry_chunk))
         // Terms API
-        .route("/api/terms/:id", get(api::terms::get_term_detail))
+        .route("/api/terms", get(api::terms::list_terms).post(api::terms::create_term))
+        .route("/api/terms/merge", axum::routing::post(api::terms::merge_terms))
+        .route("/api/terms/:id", get(api::terms::get_term_detail).patch(api::terms::update_term).delete(api::terms::delete_term))
+        .route("/api/terms/:id/define", axum::routing::post(api::terms::generate_definition))
         // Occurrences API
         .route("/api/occurrences", get(api::occurrences::list_occurrences))
         .layer(CorsLayer::permissive())

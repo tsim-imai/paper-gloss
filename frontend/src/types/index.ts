@@ -83,6 +83,27 @@ export interface OccurrencesListResponse {
   total: number
 }
 
+export interface TermListItem {
+  id: string
+  slug: string
+  lemma_en: string
+  lemma_ja: string
+  reading_kana?: string
+  pos?: string
+  tags?: string
+  occurrence_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TermListResponse {
+  items: TermListItem[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
 export interface PaginatedResponse<T> {
   items: T[]
   total: number

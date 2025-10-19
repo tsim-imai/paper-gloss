@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import PaperPage from './pages/PaperPage'
 import HomePage from './pages/HomePage'
+import GlossaryPage from './pages/GlossaryPage'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         </h1>
         <nav>
           <Link to="/" style={{ marginRight: '1rem' }}>Home</Link>
+          <Link to="/glossary" style={{ marginRight: '1rem' }}>Glossary</Link>
         </nav>
       </header>
 
@@ -28,6 +30,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/papers/:id" element={<PaperPage />} />
+          <Route path="/glossary" element={<GlossaryPage />} />
         </Routes>
       </main>
 

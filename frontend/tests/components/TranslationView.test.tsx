@@ -1,10 +1,8 @@
 import { describe, it } from 'vitest'
 
-// T026 [US1] TranslationView must exist and render translated chunks
+// T026 [US1] TranslationView must exist (component-level)
 describe('T026 TranslationView component', () => {
-  it('should be importable from src/pages/TranslationView', async () => {
-    // @ts-expect-error module is pending implementation
-    await import('../../src/pages/TranslationView')
+  it('is importable', async () => {
+    await import('../../src/components/TranslationView')
   })
 })
-

@@ -3,6 +3,9 @@ pub mod extraction;
 pub mod normalization;
 pub mod definition;
 pub mod occurrence_tracker;
+pub mod search;
+pub mod duplicate_detection;
+pub mod merge;
 
 pub use extraction::{TermExtractor, ExtractedTerm};
 pub use normalization::{
@@ -11,3 +14,6 @@ pub use normalization::{
 };
 pub use definition::DefinitionGenerator;
 pub use occurrence_tracker::OccurrenceTracker;
+pub use search::{TermSearchService, TermSearchResult};
+pub use duplicate_detection::{DuplicateDetectionService, DuplicatePair};
+pub use merge::TermMergeService;

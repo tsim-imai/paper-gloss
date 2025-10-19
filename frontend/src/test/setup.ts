@@ -6,3 +6,7 @@ import '@testing-library/jest-dom'
 afterEach(() => {
   cleanup()
 })
+
+// Avoid modal alerts blocking tests
+// @ts-ignore
+globalThis.alert = () => {}
