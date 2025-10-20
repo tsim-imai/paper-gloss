@@ -33,15 +33,15 @@ export default function TermMerge({ onClose }: TermMergeProps) {
   const queryClient = useQueryClient()
 
   // Fetch duplicate pairs
-  const { data: duplicates, isLoading } = useQuery({
+  const { data: duplicatesData, isLoading } = useQuery({
     queryKey: ['duplicates'],
     queryFn: async () => {
-      // Note: This endpoint doesn't exist in the backend yet
-      // For now, we'll use a placeholder
-      // TODO: Add GET /terms/duplicates endpoint
-      return [] as DuplicatePair[]
+      const response = await apiClient.findDuplicates()
+      return response.data as { duplicates: DuplicatePair[]; total: number }
     },
   })
+
+  const duplicates = duplicatesData?.duplicates || []
 
   // Merge mutation
   const mergeMutation = useMutation({

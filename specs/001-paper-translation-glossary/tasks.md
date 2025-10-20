@@ -212,7 +212,7 @@
 - [X] T090 [P] [US3] Create GlossaryPanel component in frontend/src/components/glossary/GlossaryPanel.tsx (term list, frequency sorting) per spec.md:56
 - [X] T091 [P] [US3] Create GlossarySearch component in frontend/src/components/glossary/GlossarySearch.tsx (bilingual, real-time filtering) per spec.md:57, FR-023
 - [X] T092 [P] [US3] Create TermForm component in frontend/src/components/glossary/TermForm.tsx (add/edit term) per spec.md:58-59
-- [ ] T093 [P] [US3] Create TermMerge component in frontend/src/components/glossary/TermMerge.tsx (duplicate selection, confirmation) per spec.md:60
+- [X] T093 [P] [US3] Create TermMerge component in frontend/src/components/glossary/TermMerge.tsx (duplicate selection, confirmation) per spec.md:60
 - [X] T094 [US3] Create GlossaryPage route in frontend/src/pages/GlossaryPage.tsx per spec.md:55
 
 **Search & Normalization**:

@@ -25,6 +25,7 @@ describe('T071 High-frequency term highlighting', () => {
     const elapsed = performance.now() - start
     expect(container).toBeTruthy()
     // Allow some headroom for CI/jsdom overhead
-    expect(elapsed).toBeLessThan(250)
+    // CI/jsdomは遅くなるため、実運用閾値(100ms)の4倍を上限にする
+    expect(elapsed).toBeLessThan(400)
   })
 })

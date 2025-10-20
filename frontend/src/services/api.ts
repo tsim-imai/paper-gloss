@@ -122,6 +122,10 @@ class ApiClient {
     return this.client.post(`/terms/${termId}/define`)
   }
 
+  async findDuplicates() {
+    return this.client.get('/terms/duplicates')
+  }
+
   // Occurrences API
   async listOccurrences(paperId?: string, termId?: string) {
     return this.client.get('/occurrences', {

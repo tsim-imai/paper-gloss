@@ -5,6 +5,7 @@ import { TermListResponse, TermListItem } from '../types'
 import GlossarySearch from '../components/glossary/GlossarySearch'
 import GlossaryPanel from '../components/glossary/GlossaryPanel'
 import TermForm, { TermFormData } from '../components/glossary/TermForm'
+import TermMerge from '../components/glossary/TermMerge'
 
 export default function GlossaryPage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -12,6 +13,7 @@ export default function GlossaryPage() {
   const [searchSort, setSearchSort] = useState('alphabetical')
   const [page, setPage] = useState(1)
   const [showForm, setShowForm] = useState(false)
+  const [showMerge, setShowMerge] = useState(false)
   const [editingTerm, setEditingTerm] = useState<TermListItem | null>(null)
 
   const queryClient = useQueryClient()
@@ -109,21 +111,38 @@ export default function GlossaryPage() {
         marginBottom: '1.5rem',
       }}>
         <h1 style={{ margin: 0 }}>Glossary</h1>
-        <button
-          onClick={handleAddNewTerm}
-          style={{
-            padding: '0.75rem 1.5rem',
-            fontSize: '1rem',
-            backgroundColor: '#646cff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-          }}
-        >
-          + Add Term
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={() => setShowMerge(true)}
+            style={{
+              padding: '0.75rem 1.5rem',
+              fontSize: '1rem',
+              backgroundColor: '#f59e0b',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            Merge Duplicates
+          </button>
+          <button
+            onClick={handleAddNewTerm}
+            style={{
+              padding: '0.75rem 1.5rem',
+              fontSize: '1rem',
+              backgroundColor: '#646cff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            + Add Term
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -207,6 +226,11 @@ export default function GlossaryPage() {
             Next
           </button>
         </div>
+      )}
+
+      {/* Merge duplicates modal */}
+      {showMerge && (
+        <TermMerge onClose={() => setShowMerge(false)} />
       )}
     </div>
   )
