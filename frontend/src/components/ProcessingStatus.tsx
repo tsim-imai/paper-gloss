@@ -46,9 +46,9 @@ export default function ProcessingStatus({ paper }: ProcessingStatusProps) {
 
   const getProgressPercentage = () => {
     const total = progress?.total_chunks || paper.total_chunks || 0
-    const translated = progress?.translated_chunks || paper.translated_chunks || 0
+    const completed = (progress as any)?.completed_chunks ?? paper.translated_chunks ?? 0
     if (total === 0) return 0
-    return Math.round((translated / total) * 100)
+    return Math.round((completed / total) * 100)
   }
 
   const canProcess = paper.status === 'pending' || paper.status === 'failed'
@@ -116,7 +116,7 @@ export default function ProcessingStatus({ paper }: ProcessingStatusProps) {
         {progress || (paper.total_chunks !== undefined) ? (
           <>
             <div>Total Chunks: {progress?.total_chunks ?? paper.total_chunks ?? 0}</div>
-            <div>Translated: {progress?.translated_chunks ?? paper.translated_chunks ?? 0}</div>
+            <div>Translated: {(progress as any)?.completed_chunks ?? paper.translated_chunks ?? 0}</div>
             {(progress?.failed_chunks || paper.failed_chunks) ? (
               <div style={{ color: '#f44336' }}>
                 Failed: {progress?.failed_chunks ?? paper.failed_chunks}

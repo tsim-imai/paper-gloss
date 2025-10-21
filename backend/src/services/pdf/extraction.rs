@@ -112,4 +112,15 @@ mod tests {
         let result = PdfExtractor::extract_from_file(temp_file.path());
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_extract_with_recovery_returns_empty_on_failure() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(b"not a valid pdf").unwrap();
+
+        let result = PdfExtractor::extract_with_recovery(temp_file.path()).unwrap();
+        assert_eq!(result.text, "");
+        assert!(result.page_count == 0);
+        assert!(!result.failed_pages.is_empty());
+    }
 }

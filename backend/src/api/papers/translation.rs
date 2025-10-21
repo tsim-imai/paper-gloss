@@ -38,14 +38,7 @@ pub async fn get_translation(
         .await
         .map_err(|e| AppError::InternalServerError(format!("Database error: {}", e)))?;
 
-    if chunks.is_empty() {
-        return Err(AppError::NotFound(format!(
-            "No chunks found for paper {}",
-            paper_id
-        )));
-    }
-
-    // Transform all chunks to response format
+    // Transform all chunks to response format (empty list is valid)
     let chunk_responses: Vec<ChunkResponse> = chunks
         .into_iter()
         .map(|chunk| {

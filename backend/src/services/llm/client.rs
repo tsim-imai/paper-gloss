@@ -314,4 +314,105 @@ mod tests {
         let terms = client.extract_terms("foo bar").await.unwrap();
         assert_eq!(terms, vec!["ニューラルネットワーク", "蒸留"]);
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn fr014_concurrency_is_limited_to_10() {
+        use std::time::Instant;
+
+        let server = MockServer::start_async().await;
+        server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(200)
+                    .delay(std::time::Duration::from_millis(50))
+                    .json_body(json!({
+                        "id": "chatcmpl",
+                        "object": "chat.completion",
+                        "created": 0,
+                        "model": "gpt-4",
+                        "choices": [{
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop"
+                        }]
+                    }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+        let client = LlmClient::new().unwrap();
+
+        // Fire 20 concurrent requests; with limit 10 and 50ms per request,
+        // elapsed should be roughly >= 100ms (two waves).
+        use futures::future::join_all;
+        let start = Instant::now();
+        let futs = (0..20).map(|_| {
+            let c = client.clone();
+            async move {
+                let msgs = vec![Message { role: "user".into(), content: "ping".into() }];
+                let _ = c.chat_completion(msgs, None, Some(8)).await.ok();
+            }
+        });
+        join_all(futs).await;
+        let elapsed = start.elapsed();
+        assert!(elapsed >= std::time::Duration::from_millis(90), "elapsed {elapsed:?} too short; concurrency limit may be broken");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn fr015_retries_500_at_least_three_times() {
+        use httpmock::Mock;
+        let server = MockServer::start_async().await;
+
+        // Always return 500 for chat completions
+        let m: Mock = server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(500).json_body(json!({
+                    "error": {"message": "server error", "type": "server_error"}
+                }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+        let client = LlmClient::new().unwrap();
+
+        let _ = client
+            .chat_completion(vec![Message { role: "user".into(), content: "hello".into() }], None, Some(8))
+            .await
+            .err();
+
+        // SPEC FR-015: Expect exponential backoff retries (>=3 attempts)
+        assert!(m.hits() >= 3, "expected at least 3 retry attempts, got {}", m.hits());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn fr015_retries_429_at_least_three_times() {
+        use httpmock::Mock;
+        let server = MockServer::start_async().await;
+
+        let m: Mock = server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(429).json_body(json!({
+                    "error": {"message": "rate limit", "type": "rate_limit"}
+                }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+        let client = LlmClient::new().unwrap();
+
+        let _ = client
+            .chat_completion(vec![Message { role: "user".into(), content: "hello".into() }], None, Some(8))
+            .await
+            .err();
+
+        assert!(m.hits() >= 3, "expected at least 3 retry attempts, got {}", m.hits());
+    }
 }

@@ -131,3 +131,29 @@ impl Drop for LlmLogger {
         debug!("LlmLogger for {:?} dropped", self.base_dir);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn fr016_logs_are_written_to_artifacts_dir() {
+        let pid = uuid::Uuid::new_v4().to_string();
+        let logger = LlmLogger::new(&pid).unwrap();
+        logger
+            .log_translation("c1", "src", Some("dst"), None, 12)
+            .unwrap();
+        logger
+            .log_term_extraction("text", Some(vec!["term".into()]), None, 5)
+            .unwrap();
+        logger
+            .log_definition("transformer", Some("定義"), None, 7)
+            .unwrap();
+
+        let base = format!("artifacts/papers/{}/llm_logs", pid);
+        assert!(fs::metadata(format!("{}/translation.jsonl", base)).is_ok());
+        assert!(fs::metadata(format!("{}/term_extraction.jsonl", base)).is_ok());
+        assert!(fs::metadata(format!("{}/definition.jsonl", base)).is_ok());
+    }
+}
