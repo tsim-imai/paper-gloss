@@ -266,7 +266,9 @@ mod tests {
         // translate
         server
             .mock_async(|when, then| {
-                when.method(POST).path("/v1/chat/completions");
+                when.method(POST)
+                    .path("/v1/chat/completions")
+                    .body_contains("professional English-to-Japanese translator");
                 then.status(200).json_body(json!({
                     "id": "chatcmpl-1",
                     "object": "chat.completion",
@@ -284,7 +286,9 @@ mod tests {
         // extract_terms
         server
             .mock_async(|when, then| {
-                when.method(POST).path("/v1/chat/completions");
+                when.method(POST)
+                    .path("/v1/chat/completions")
+                    .body_contains("Extract all machine learning-related technical terms");
                 let terms_json = "[\"ニューラルネットワーク\",\"蒸留\"]";
                 then.status(200).json_body(json!({
                     "id": "chatcmpl-2",

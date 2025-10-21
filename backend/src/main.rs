@@ -1,5 +1,6 @@
 use anyhow::Result;
 use axum::{
+    extract::DefaultBodyLimit,
     routing::get,
     Router,
 };
@@ -76,6 +77,7 @@ async fn main() -> Result<()> {
         .route("/api/occurrences", get(api::occurrences::list_occurrences))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
+        .layer(DefaultBodyLimit::max(150 * 1024 * 1024)) // 150 MB limit for PDF uploads
         .with_state(pool);
 
     // Get server configuration

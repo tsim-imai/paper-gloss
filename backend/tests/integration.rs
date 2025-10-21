@@ -9,3 +9,5 @@ mod test_term_extraction;
 #[path = "integration/test_glossary.rs"]
 mod test_glossary;
 
+#[path = "integration/test_term_define_llm_proxy.rs"]
+mod test_term_define_llm_proxy;

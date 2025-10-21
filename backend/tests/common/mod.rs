@@ -40,6 +40,39 @@ impl TestServer {
 
         Ok(Self { base_url: base, child, _db_path: db_path })
     }
+
+    /// Spawn server with additional environment variables (e.g., AI_API_BASE)
+    pub async fn spawn_with_env(extra_env: Vec<(String, String)>) -> anyhow::Result<Self> {
+        // Pick a free port
+        let port = portpicker::pick_unused_port().expect("no free ports available");
+        let host = "127.0.0.1";
+
+        // Temp DB file
+        let tmp = tempfile::NamedTempFile::new()?;
+        let db_path = tmp.into_temp_path().to_path_buf();
+        let database_url = format!("sqlite://{}", db_path.display());
+
+        // Resolve binary path
+        let bin = resolve_binary_path();
+        anyhow::ensure!(bin.exists(), "backend binary not found at {:?}", bin);
+
+        let mut cmd = Command::new(bin);
+        cmd.env("HOST", host)
+            .env("PORT", port.to_string())
+            .env("DATABASE_URL", database_url)
+            .env("RUST_LOG", "debug");
+        for (k, v) in extra_env.into_iter() {
+            cmd.env(k, v);
+        }
+
+        let child = cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit()).spawn()?;
+
+        let base = format!("http://{}:{}", host, port);
+        // Wait for /health to be ready
+        wait_for_health(&base, Duration::from_secs(10)).await?;
+
+        Ok(Self { base_url: base, child, _db_path: db_path })
+    }
 }
 
 impl Drop for TestServer {

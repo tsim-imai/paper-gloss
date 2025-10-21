@@ -3,6 +3,7 @@ use crate::models::Paper;
 use crate::services::PaperProcessor;
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     Json,
 };
 use serde::Serialize;
@@ -18,7 +19,7 @@ pub struct ProcessTriggerResponse {
 pub async fn process_paper(
     State(pool): State<SqlitePool>,
     Path(paper_id): Path<String>,
-) -> Result<Json<ProcessTriggerResponse>, AppError> {
+) -> Result<(StatusCode, Json<ProcessTriggerResponse>), AppError> {
     // Verify paper exists
     let _paper = Paper::find_by_id(&pool, &paper_id)
         .await
@@ -44,8 +45,11 @@ pub async fn process_paper(
         }
     });
 
-    Ok(Json(ProcessTriggerResponse {
-        paper_id,
-        message: "Processing started. Use GET /papers/{id}/status to check progress.".to_string(),
-    }))
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(ProcessTriggerResponse {
+            paper_id,
+            message: "Processing started. Use GET /papers/{id}/status to check progress.".to_string(),
+        }),
+    ))
 }

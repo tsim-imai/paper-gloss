@@ -42,7 +42,7 @@ pub struct PaperListItem {
 
 #[derive(Debug, Serialize)]
 pub struct ListResponse {
-    pub items: Vec<PaperListItem>,
+    pub papers: Vec<PaperListItem>,
     pub total: i64,
     pub page: i64,
     pub limit: i64,
@@ -134,7 +134,7 @@ pub async fn list_papers(
     }
 
     Ok(Json(ListResponse {
-        items,
+        papers: items,
         total,
         page: query.page,
         limit: query.limit,
