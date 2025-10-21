@@ -24,9 +24,17 @@ pub async fn merge_terms(
     State(pool): State<SqlitePool>,
     Json(req): Json<MergeTermsRequest>,
 ) -> Result<Json<MergeTermsResponse>, AppError> {
+    // Validate confirmed flag
     if !req.confirmed {
         return Err(AppError::BadRequest(
-            "Merge operation requires confirmation".to_string(),
+            "Merge operation requires confirmation (confirmed must be true)".to_string(),
+        ));
+    }
+
+    // Validate source and target are different
+    if req.source_id == req.target_id {
+        return Err(AppError::BadRequest(
+            "Cannot merge a term with itself (source_id and target_id must be different)".to_string(),
         ));
     }
 
@@ -35,7 +43,14 @@ pub async fn merge_terms(
     let affected_count = merge_service
         .merge_terms(&req.source_id, &req.target_id, req.confirmed)
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Merge failed: {}", e)))?;
+        .map_err(|e| {
+            // Map specific errors to appropriate HTTP status codes
+            if e.to_string().contains("not found") {
+                AppError::NotFound(format!("One or both terms not found: {}", e))
+            } else {
+                AppError::InternalServerError(format!("Merge failed: {}", e))
+            }
+        })?;
 
     Ok(Json(MergeTermsResponse {
         source_id: req.source_id,

@@ -16,7 +16,7 @@ pub struct Paper {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "TEXT")]
+#[sqlx(type_name = "TEXT", rename_all = "lowercase")]
 pub enum PaperStatus {
     #[serde(rename = "pending")]
     Pending,

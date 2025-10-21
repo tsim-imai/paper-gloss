@@ -67,5 +67,11 @@ http-body-util = "0.1"
 portpicker = "0.1"
 tempfile = "3"
 
+# HTTP mock server for LLM proxy tests
+httpmock = "0.7"
+
+# Run certain tests serially to avoid env var races
+serial_test = "2"
+
 # Enable multipart support for reqwest in tests (unified feature set)
 reqwest = { version = "0.11", features = ["json", "multipart"] }

@@ -30,15 +30,24 @@ pub async fn generate_definition(
         })?;
 
     // Initialize definition generator
-    let llm_client = LlmClient::new()
-        .map_err(|e| AppError::InternalServerError(format!("LLM client error: {}", e)))?;
+    let llm_client = LlmClient::new().map_err(|e| {
+        // Map LLM initialization errors to 503 Service Unavailable
+        AppError::ServiceUnavailable(format!("LLM service unavailable: {}", e))
+    })?;
     let def_generator = DefinitionGenerator::new(llm_client, pool);
 
     // Generate and store definition
     let definition = def_generator
         .generate_and_store(&term.id, &term.lemma_en, &term.lemma_ja, None)
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Definition generation failed: {}", e)))?;
+        .map_err(|e| {
+            // Map LLM generation errors to 503 Service Unavailable
+            if e.to_string().contains("LLM") || e.to_string().contains("timeout") {
+                AppError::ServiceUnavailable(format!("LLM service error: {}", e))
+            } else {
+                AppError::InternalServerError(format!("Definition generation failed: {}", e))
+            }
+        })?;
 
     Ok(Json(GenerateDefinitionResponse {
         term_id: term.id,

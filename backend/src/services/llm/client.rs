@@ -41,11 +41,12 @@ struct Choice {
 
 impl LlmClient {
     /// Create new LLM client with concurrency limit (max 10 parallel requests per FR-014)
+    /// Defaults to localhost:8000 if environment variables are not set
     pub fn new() -> Result<Self> {
         let api_base = env::var("AI_API_BASE")
-            .context("AI_API_BASE environment variable not set")?;
+            .unwrap_or_else(|_| "http://localhost:8000".to_string());
         let api_key = env::var("AI_API_KEY")
-            .context("AI_API_KEY environment variable not set")?;
+            .unwrap_or_else(|_| "test-api-key".to_string());
 
         let client = Client::builder()
             .timeout(Duration::from_secs(120))
@@ -186,5 +187,127 @@ impl LlmClient {
 impl Default for LlmClient {
     fn default() -> Self {
         Self::new().expect("Failed to create LLM client")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use httpmock::Method::POST;
+    use httpmock::MockServer;
+    use serial_test::serial;
+    use serde_json::json;
+
+    #[tokio::test]
+    #[serial]
+    async fn openai_chat_completions_happy_path() {
+        let server = MockServer::start_async().await;
+
+        server
+            .mock_async(|when, then| {
+                when.method(POST)
+                    .path("/v1/chat/completions")
+                    .header("authorization", "Bearer sk-test");
+                then.status(200).json_body(json!({
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "こんにちは"},
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+                }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+
+        let client = LlmClient::new().unwrap();
+        let messages = vec![
+            Message { role: "system".into(), content: "sys".into() },
+            Message { role: "user".into(), content: "hello".into() },
+        ];
+        let out = client.chat_completion(messages, Some("gpt-4".into()), Some(32)).await.unwrap();
+        assert_eq!(out, "こんにちは");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn openai_chat_completions_error_status_surfaces() {
+        let server = MockServer::start_async().await;
+
+        server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(500).json_body(json!({
+                    "error": {"message": "server error", "type": "server_error"}
+                }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+
+        let client = LlmClient::new().unwrap();
+        let messages = vec![Message { role: "user".into(), content: "hello".into() }];
+        let err = client.chat_completion(messages, None, Some(16)).await.err();
+        assert!(err.is_some());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn translate_and_extract_terms_use_openai_contract() {
+        let server = MockServer::start_async().await;
+
+        // translate
+        server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(200).json_body(json!({
+                    "id": "chatcmpl-1",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "和訳テキスト"},
+                        "finish_reason": "stop"
+                    }]
+                }));
+            })
+            .await;
+
+        // extract_terms
+        server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                let terms_json = "[\"ニューラルネットワーク\",\"蒸留\"]";
+                then.status(200).json_body(json!({
+                    "id": "chatcmpl-2",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": terms_json},
+                        "finish_reason": "stop"
+                    }]
+                }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+
+        let client = LlmClient::new().unwrap();
+        let jp = client.translate("Some text").await.unwrap();
+        assert_eq!(jp, "和訳テキスト");
+
+        let terms = client.extract_terms("foo bar").await.unwrap();
+        assert_eq!(terms, vec!["ニューラルネットワーク", "蒸留"]);
     }
 }

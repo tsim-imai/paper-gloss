@@ -92,10 +92,17 @@ async fn handle_file_upload(
     file_data: Vec<u8>,
     title: Option<String>,
 ) -> Result<(StatusCode, HeaderMap, Json<ImportResponse>), AppError> {
-    // Validate PDF
+    // Validate PDF size
     if file_data.len() > 100 * 1024 * 1024 {
         return Err(AppError::UnprocessableEntity(
             "PDF file too large (max 100 MB)".to_string(),
+        ));
+    }
+
+    // Validate PDF format (check PDF magic bytes)
+    if file_data.len() < 4 || &file_data[0..4] != b"%PDF" {
+        return Err(AppError::UnprocessableEntity(
+            "Invalid file format. Only PDF files are accepted.".to_string(),
         ));
     }
 
@@ -117,9 +124,12 @@ async fn handle_file_upload(
     info!("Saved PDF to {}", file_path);
 
     // Create paper record
-    let paper = Paper::create(pool, title.clone(), None, file_path)
+    let paper = Paper::create(pool, title.clone(), None, file_path.clone())
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Failed to create paper: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!("Failed to create paper in database: {:?}", e);
+            AppError::InternalServerError(format!("Failed to create paper: {}", e))
+        })?;
 
     // Trigger async processing
     let pool_clone = pool.clone();
@@ -236,9 +246,12 @@ async fn handle_arxiv_import(
     info!("Downloaded and saved PDF from arXiv to {}", file_path);
 
     // Create paper record with source URL
-    let paper = Paper::create(pool, title.clone(), Some(url), file_path)
+    let paper = Paper::create(pool, title.clone(), Some(url), file_path.clone())
         .await
-        .map_err(|e| AppError::InternalServerError(format!("Failed to create paper: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!("Failed to create paper in database: {:?}", e);
+            AppError::InternalServerError(format!("Failed to create paper: {}", e))
+        })?;
 
     // Trigger async processing
     let pool_clone = pool.clone();

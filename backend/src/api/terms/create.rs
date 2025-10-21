@@ -1,7 +1,7 @@
 use crate::api::error::AppError;
 use crate::models::{Term, TermVariant};
 use crate::services::terms::{generate_english_variants, generate_japanese_variants};
-use axum::{extract::State, Json};
+use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
@@ -33,7 +33,7 @@ pub struct CreateTermResponse {
 pub async fn create_term(
     State(pool): State<SqlitePool>,
     Json(req): Json<CreateTermRequest>,
-) -> Result<Json<CreateTermResponse>, AppError> {
+) -> Result<(StatusCode, Json<CreateTermResponse>), AppError> {
     // Generate slug from lemma_en (lowercase, replace spaces with hyphens)
     let slug = req
         .lemma_en
@@ -66,16 +66,19 @@ pub async fn create_term(
         let _ = TermVariant::create(&pool, term.id.clone(), "ja".to_string(), variant).await;
     }
 
-    Ok(Json(CreateTermResponse {
-        id: term.id,
-        slug: term.slug,
-        lemma_en: term.lemma_en,
-        lemma_ja: term.lemma_ja,
-        reading_kana: term.reading_kana,
-        pos: term.pos,
-        tags: term.tags,
-        note: term.note,
-        created_at: term.created_at.to_rfc3339(),
-        updated_at: term.updated_at.to_rfc3339(),
-    }))
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateTermResponse {
+            id: term.id,
+            slug: term.slug,
+            lemma_en: term.lemma_en,
+            lemma_ja: term.lemma_ja,
+            reading_kana: term.reading_kana,
+            pos: term.pos,
+            tags: term.tags,
+            note: term.note,
+            created_at: term.created_at.to_rfc3339(),
+            updated_at: term.updated_at.to_rfc3339(),
+        }),
+    ))
 }

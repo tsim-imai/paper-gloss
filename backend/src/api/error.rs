@@ -23,6 +23,7 @@ pub enum AppError {
     InternalServerError(String),
     UnprocessableEntity(String),
     GatewayTimeout(String),
+    ServiceUnavailable(String),
     Conflict(String),
 }
 
@@ -34,6 +35,7 @@ impl fmt::Display for AppError {
             AppError::InternalServerError(msg) => write!(f, "Internal server error: {}", msg),
             AppError::UnprocessableEntity(msg) => write!(f, "Unprocessable entity: {}", msg),
             AppError::GatewayTimeout(msg) => write!(f, "Gateway timeout: {}", msg),
+            AppError::ServiceUnavailable(msg) => write!(f, "Service unavailable: {}", msg),
             AppError::Conflict(msg) => write!(f, "Conflict: {}", msg),
         }
     }
@@ -54,6 +56,9 @@ impl IntoResponse for AppError {
             }
             AppError::GatewayTimeout(msg) => {
                 (StatusCode::GATEWAY_TIMEOUT, "GatewayTimeout", msg)
+            }
+            AppError::ServiceUnavailable(msg) => {
+                (StatusCode::SERVICE_UNAVAILABLE, "ServiceUnavailable", msg)
             }
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "Conflict", msg),
         };

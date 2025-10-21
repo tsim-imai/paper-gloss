@@ -29,9 +29,9 @@ impl TestServer {
             .env("HOST", host)
             .env("PORT", port.to_string())
             .env("DATABASE_URL", database_url)
-            .env("RUST_LOG", "error")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .env("RUST_LOG", "debug")
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             .spawn()?;
 
         let base = format!("http://{}:{}", host, port);

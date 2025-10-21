@@ -45,10 +45,37 @@ pub async fn list_terms(
     State(pool): State<SqlitePool>,
     Query(query): Query<TermListQuery>,
 ) -> Result<Json<TermListResponse>, AppError> {
+    // Validate lang parameter
     let lang = query.lang.as_deref().unwrap_or("both");
+    if !["en", "ja", "both"].contains(&lang) {
+        return Err(AppError::BadRequest(
+            "Invalid lang parameter. Must be 'en', 'ja', or 'both'".to_string(),
+        ));
+    }
+
+    // Validate sort parameter
     let sort = query.sort.as_deref().unwrap_or("alphabetical");
-    let page = query.page.unwrap_or(1).max(1);
-    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    if !["alphabetical", "frequency", "recent"].contains(&sort) {
+        return Err(AppError::BadRequest(
+            "Invalid sort parameter. Must be 'alphabetical', 'frequency', or 'recent'".to_string(),
+        ));
+    }
+
+    // Validate page and limit
+    let page = query.page.unwrap_or(1);
+    if page < 1 {
+        return Err(AppError::BadRequest(
+            "Invalid page parameter. Must be >= 1".to_string(),
+        ));
+    }
+
+    let limit = query.limit.unwrap_or(50);
+    if limit < 1 {
+        return Err(AppError::BadRequest(
+            "Invalid limit parameter. Must be >= 1".to_string(),
+        ));
+    }
+    let limit = limit.min(100); // Cap at 100
 
     let search_service = TermSearchService::new(pool);
 
