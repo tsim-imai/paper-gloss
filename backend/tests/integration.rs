@@ -11,3 +11,6 @@ mod test_glossary;
 
 #[path = "integration/test_term_define_llm_proxy.rs"]
 mod test_term_define_llm_proxy;
+
+#[path = "integration/test_persistence.rs"]
+mod test_persistence;

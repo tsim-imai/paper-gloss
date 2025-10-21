@@ -2,6 +2,8 @@ mod common;
 
 #[path = "contract/test_paper_import.rs"]
 mod test_paper_import;
+#[path = "contract/test_paper_import_edges.rs"]
+mod test_paper_import_edges;
 
 #[path = "contract/test_paper_list.rs"]
 mod test_paper_list;
@@ -14,6 +16,8 @@ mod test_translation;
 
 #[path = "contract/test_paper_process.rs"]
 mod test_paper_process;
+#[path = "contract/test_paper_status.rs"]
+mod test_paper_status;
 
 #[path = "contract/test_chunk_retry.rs"]
 mod test_chunk_retry;
@@ -42,6 +46,8 @@ mod test_term_delete;
 
 #[path = "contract/test_term_merge.rs"]
 mod test_term_merge;
+#[path = "contract/test_term_duplicates.rs"]
+mod test_term_duplicates;
 
 #[path = "contract/test_term_define.rs"]
 mod test_term_define;
