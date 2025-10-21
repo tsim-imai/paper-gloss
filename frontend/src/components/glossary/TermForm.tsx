@@ -63,7 +63,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
       <form onSubmit={handleSubmit}>
         {/* English lemma */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{
+          <label htmlFor="term-lemma-en" style={{
             display: 'block',
             fontSize: '0.875rem',
             fontWeight: 'bold',
@@ -73,6 +73,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             English Term <span style={{ color: '#c62828' }}>*</span>
           </label>
           <input
+            id="term-lemma-en"
             type="text"
             required
             value={formData.lemma_en}
@@ -90,7 +91,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
 
         {/* Japanese lemma */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{
+          <label htmlFor="term-lemma-ja" style={{
             display: 'block',
             fontSize: '0.875rem',
             fontWeight: 'bold',
@@ -100,6 +101,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             Japanese Term <span style={{ color: '#c62828' }}>*</span>
           </label>
           <input
+            id="term-lemma-ja"
             type="text"
             required
             value={formData.lemma_ja}
@@ -117,7 +119,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
 
         {/* Reading (kana) */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{
+          <label htmlFor="term-reading" style={{
             display: 'block',
             fontSize: '0.875rem',
             fontWeight: 'bold',
@@ -127,6 +129,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             Reading (Kana)
           </label>
           <input
+            id="term-reading"
             type="text"
             value={formData.reading_kana}
             onChange={(e) => setFormData({ ...formData, reading_kana: e.target.value })}
@@ -143,7 +146,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
 
         {/* Part of speech */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{
+          <label htmlFor="term-pos" style={{
             display: 'block',
             fontSize: '0.875rem',
             fontWeight: 'bold',
@@ -153,6 +156,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             Part of Speech
           </label>
           <input
+            id="term-pos"
             type="text"
             value={formData.pos}
             onChange={(e) => setFormData({ ...formData, pos: e.target.value })}
@@ -169,7 +173,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
 
         {/* Tags */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{
+          <label htmlFor="term-tags" style={{
             display: 'block',
             fontSize: '0.875rem',
             fontWeight: 'bold',
@@ -179,6 +183,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             Tags
           </label>
           <input
+            id="term-tags"
             type="text"
             value={formData.tags}
             onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
@@ -195,7 +200,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
 
         {/* Note */}
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{
+          <label htmlFor="term-note" style={{
             display: 'block',
             fontSize: '0.875rem',
             fontWeight: 'bold',
@@ -205,6 +210,7 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             Note
           </label>
           <textarea
+            id="term-note"
             value={formData.note}
             onChange={(e) => setFormData({ ...formData, note: e.target.value })}
             placeholder="Additional notes..."

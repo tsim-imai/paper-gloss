@@ -20,6 +20,8 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "uuid", 
 
 # HTTP client for LLM API
 reqwest = { version = "0.11", features = ["json"] }
+httpdate = "1"
+rand = "0.8"
 
 # PDF extraction
 pdf-extract = "0.7"
@@ -75,3 +77,5 @@ serial_test = "2"
 
 # Enable multipart support for reqwest in tests (unified feature set)
 reqwest = { version = "0.11", features = ["json", "multipart"] }
+httpdate = "1"
+rand = "0.8"

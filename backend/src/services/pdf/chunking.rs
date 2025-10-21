@@ -129,6 +129,7 @@ impl TextChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
 
     #[test]
     fn test_chunk_small_text() {
@@ -165,5 +166,46 @@ mod tests {
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, hash3);
         assert_eq!(hash1.len(), 64); // SHA-256 hex length
+    }
+
+    #[test]
+    fn fr009_default_chunk_sizes_and_overlap() {
+        // Prepare ~3000 words, with paragraph boundaries every 100 words
+        let para = |n: usize| -> String { (0..n).map(|i| format!("w{}", i)).collect::<Vec<_>>().join(" ") };
+        let mut parts = Vec::new();
+        for _ in 0..30 { parts.push(para(100)); }
+        let text = parts.join("\n\n");
+
+        let chunker = TextChunker::default(); // 800..1200, overlap 12%
+        let chunks = chunker.chunk(&text);
+
+        assert!(chunks.len() >= 2, "should split into multiple chunks");
+
+        // Helper to count words in a chunk text
+        let words = |s: &str| -> Vec<String> { s.split_whitespace().map(|w| w.to_string()).collect() };
+
+        for (i, ch) in chunks.iter().enumerate() {
+            let w = words(&ch.text);
+            // All non-final chunks should be within 800..1200 words
+            if i < chunks.len() - 1 {
+                assert!(w.len() >= 800 && w.len() <= 1200,
+                        "chunk {} size {} not within [800,1200]", i, w.len());
+            }
+
+            // Overlap check with next chunk
+            if i + 1 < chunks.len() {
+                let next = &chunks[i + 1];
+                let w_next = words(&next.text);
+                let overlap_n = ((w.len() as f32) * 0.12) as usize; // expected 12%
+                let tail = &w[w.len().saturating_sub(overlap_n)..];
+                let head = &w_next[..overlap_n.min(w_next.len())];
+                assert_eq!(tail, head, "chunk {} tail must equal chunk {} head (overlap)", i, i+1);
+
+                // Ratio should be within 10%-15%
+                let ratio = (overlap_n as f32) / (w.len() as f32);
+                assert!(ratio >= 0.10 && ratio <= 0.15,
+                        "overlap ratio {:.3} out of [0.10,0.15] for chunk {}", ratio, i);
+            }
+        }
     }
 }

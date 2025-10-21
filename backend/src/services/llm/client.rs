@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::Duration;
 use tokio::sync::Semaphore;
+use tokio::time::sleep;
 use tracing::{debug, error};
 
 /// OpenAI-compatible LLM client with concurrency limiting
@@ -87,36 +88,80 @@ impl LlmClient {
 
         debug!("LLM request: {:?}", request_body);
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .context("Failed to send LLM request")?;
+        // FR-015: Exponential backoff retry on transient failures
+        let max_retries = 5usize;
+        let mut attempt = 0usize;
+        loop {
+            attempt += 1;
+            let response = self
+                .client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
+                .await
+                .context("Failed to send LLM request")?;
 
-        let status = response.status();
-        let body = response.text().await?;
+            let status = response.status();
 
-        if status != StatusCode::OK {
-            error!("LLM API error ({}): {}", status, body);
-            anyhow::bail!("LLM API returned error status {}: {}", status, body);
+            if status == StatusCode::OK {
+                let body = response.text().await?;
+                let chat_response: ChatResponse = serde_json::from_str(&body)
+                    .context("Failed to parse LLM response")?;
+                let content = chat_response
+                    .choices
+                    .first()
+                    .and_then(|choice| Some(choice.message.content.clone()))
+                    .context("LLM response missing content")?;
+                debug!("LLM response: {}", content);
+                return Ok(content);
+            }
+
+            // Decide if retryable
+            let retryable = status == StatusCode::TOO_MANY_REQUESTS
+                || status.is_server_error();
+
+            // Compute backoff
+            if retryable && attempt < max_retries {
+                // Honor Retry-After for 429 if present
+                let mut delay = None;
+                if status == StatusCode::TOO_MANY_REQUESTS {
+                    if let Some(h) = response.headers().get("retry-after") {
+                        if let Ok(v) = h.to_str() {
+                            if let Ok(secs) = v.parse::<u64>() {
+                                delay = Some(Duration::from_secs(secs));
+                            } else if let Ok(dt) = httpdate::parse_http_date(v) {
+                                let now = std::time::SystemTime::now();
+                                if let Ok(dur) = dt.duration_since(now) {
+                                    delay = Some(dur);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Default exponential backoff with jitter
+                let base = Duration::from_millis(100);
+                let exp = base * (1u32 << (attempt - 1));
+                let backoff = delay.unwrap_or(exp);
+                let jitter_ms = (backoff.as_millis() as i64) / 5; // ±20%
+                let jitter = if jitter_ms > 0 {
+                    let r = (rand::random::<i32>() as i64).abs() % (2 * jitter_ms + 1) - jitter_ms;
+                    if r >= 0 { Duration::from_millis((backoff.as_millis() as i64 + r) as u64) } else { Duration::from_millis((backoff.as_millis() as i64 - r.abs()) as u64) }
+                } else {
+                    backoff
+                };
+
+                debug!("LLM retry attempt {} after {:?} (status={})", attempt, jitter, status);
+                sleep(jitter).await;
+                continue;
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                error!("LLM API error ({}): {}", status, body);
+                anyhow::bail!("LLM API returned error status {}: {}", status, body);
+            }
         }
-
-        let chat_response: ChatResponse = serde_json::from_str(&body)
-            .context("Failed to parse LLM response")?;
-
-        let content = chat_response
-            .choices
-            .first()
-            .and_then(|choice| Some(choice.message.content.clone()))
-            .context("LLM response missing content")?;
-
-        debug!("LLM response: {}", content);
-
-        Ok(content)
     }
 
     /// Translate text chunk to Japanese

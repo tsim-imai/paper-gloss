@@ -36,7 +36,19 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
     }}>
       {/* Search input */}
       <div style={{ marginBottom: '1rem' }}>
+        <label htmlFor="glossary-search-input" style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0,0,0,0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}>Search terms</label>
         <input
+          id="glossary-search-input"
           type="text"
           value={query}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -60,10 +72,11 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
       }}>
         {/* Language filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
+          <label htmlFor="glossary-lang-select" style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
             Language:
           </label>
           <select
+            id="glossary-lang-select"
             value={lang}
             onChange={(e) => handleLangChange(e.target.value)}
             style={{
@@ -82,10 +95,11 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
 
         {/* Sort order */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
+          <label htmlFor="glossary-sort-select" style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
             Sort by:
           </label>
           <select
+            id="glossary-sort-select"
             value={sort}
             onChange={(e) => handleSortChange(e.target.value)}
             style={{
