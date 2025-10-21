@@ -1,4 +1,4 @@
-use crate::models::{Term, TermVariant, Occurrence};
+use crate::models::{Term, TermVariant};
 use crate::services::llm::LlmClient;
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
@@ -68,12 +68,12 @@ Return ONLY valid JSON array, no additional text."#,
     }
 
     /// Store extracted terms in database with variants
+    /// Note: Occurrences are tracked separately in translated text by OccurrenceTracker
     pub async fn store_terms(
         &self,
-        paper_id: &str,
-        chunk_id: &str,
+        _paper_id: &str,
+        _chunk_id: &str,
         extracted_terms: Vec<ExtractedTerm>,
-        chunk_text: &str,
     ) -> Result<Vec<String>> {
         let mut term_ids = Vec::new();
 
@@ -129,42 +129,9 @@ Return ONLY valid JSON array, no additional text."#,
                 term.id
             };
 
-            // Find occurrences in chunk text
-            let occurrences = self.find_occurrences(&extracted.lemma_en, chunk_text);
-
-            // Store occurrences
-            for (start_pos, end_pos) in occurrences {
-                Occurrence::create(
-                    &self.pool,
-                    term_id.clone(),
-                    paper_id.to_string(),
-                    chunk_id.to_string(),
-                    start_pos as i32,
-                    end_pos as i32,
-                )
-                .await
-                .ok(); // Ignore duplicates
-            }
-
             term_ids.push(term_id);
         }
 
         Ok(term_ids)
-    }
-
-    /// Find all occurrences of a term in text (case-insensitive)
-    fn find_occurrences(&self, term: &str, text: &str) -> Vec<(usize, usize)> {
-        let term_lower = term.to_lowercase();
-        let text_lower = text.to_lowercase();
-        let mut occurrences = Vec::new();
-
-        let mut start = 0;
-        while let Some(pos) = text_lower[start..].find(&term_lower) {
-            let absolute_pos = start + pos;
-            occurrences.push((absolute_pos, absolute_pos + term.len()));
-            start = absolute_pos + 1;
-        }
-
-        occurrences
     }
 }

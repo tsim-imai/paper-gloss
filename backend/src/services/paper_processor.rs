@@ -1,7 +1,7 @@
-use crate::models::{Chunk, Paper, PaperStatus};
+use crate::models::{Chunk, Paper, PaperStatus, Term};
 use crate::services::llm::{LlmClient, LlmLogger};
 use crate::services::pdf::{PdfExtractor, TextChunker};
-use crate::services::terms::{TermExtractor, OccurrenceTracker};
+use crate::services::terms::{TermExtractor, OccurrenceTracker, DefinitionGenerator};
 use crate::services::translation::TranslationService;
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
@@ -108,6 +108,12 @@ impl PaperProcessor {
                 Err(e) => {
                     warn!("Translation failed for chunk {}: {}", chunk.index, e);
 
+                    // Update chunk status to failed
+                    let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+                    if let Some(db_chunk) = db_chunks.get(chunk.index) {
+                        Chunk::update_status(&self.pool, &db_chunk.id, "failed", Some(e.to_string())).await.ok();
+                    }
+
                     // Log failed translation
                     llm_logger
                         .log_translation(
@@ -149,16 +155,25 @@ impl PaperProcessor {
             // Continue anyway
         }
 
+        // Step 8: Generate definitions for extracted terms
+        info!("Generating definitions for paper {}", paper_id);
+        if let Err(e) = self.generate_definitions(paper_id).await {
+            warn!("Definition generation failed for paper {}: {}", paper_id, e);
+            // Continue anyway - definitions can be generated later
+        }
+
+        // Update final status based on translation completion
         if translated_count < total_count {
             warn!(
                 "Partial translation: {}/{} chunks for paper {}",
                 translated_count, total_count, paper_id
             );
+            // Keep status as Processing (partial completion)
+            // User can retry failed chunks
         } else {
             info!("Successfully processed paper {}", paper_id);
+            Paper::update_status(&self.pool, paper_id, PaperStatus::Completed).await?;
         }
-
-        Paper::update_status(&self.pool, paper_id, PaperStatus::Completed).await?;
 
         Ok(())
     }
@@ -176,7 +191,7 @@ impl PaperProcessor {
                 match term_extractor.extract_terms(&chunk.src_text).await {
                     Ok(extracted_terms) => {
                         term_extractor
-                            .store_terms(paper_id, &chunk.id, extracted_terms, &chunk.src_text)
+                            .store_terms(paper_id, &chunk.id, extracted_terms)
                             .await?;
                         debug!("Extracted terms from chunk {}", chunk.id);
                     }
@@ -222,6 +237,9 @@ impl PaperProcessor {
             .await
             .context("Failed to find chunk")?;
 
+        // Increment retry count
+        Chunk::increment_retry(&self.pool, chunk_id).await?;
+
         let llm_logger = LlmLogger::new(&chunk.paper_id)?;
 
         match self.translation_service.translate_chunk(&chunk.src_text, 3).await {
@@ -245,6 +263,9 @@ impl PaperProcessor {
             Err(e) => {
                 warn!("Chunk retry failed for {}: {}", chunk_id, e);
 
+                // Update status to failed with error message
+                Chunk::update_status(&self.pool, chunk_id, "failed", Some(e.to_string())).await?;
+
                 llm_logger
                     .log_translation(chunk_id, &chunk.src_text, None, Some(e.to_string()), 0)
                     .ok();
@@ -252,5 +273,59 @@ impl PaperProcessor {
                 Err(e)
             }
         }
+    }
+
+    /// Generate definitions for terms without definitions
+    async fn generate_definitions(&self, paper_id: &str) -> Result<()> {
+        let def_generator = DefinitionGenerator::new(self.llm_client.clone(), self.pool.clone());
+
+        // Get all terms from occurrences in this paper
+        let term_ids: Vec<String> = sqlx::query_scalar(
+            r#"
+            SELECT DISTINCT term_id FROM occurrences
+            WHERE paper_id = ?
+            "#,
+        )
+        .bind(paper_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        for term_id in term_ids {
+            // Check if definition already exists
+            match crate::models::Definition::find_by_term_id(&self.pool, &term_id).await {
+                Ok(Some(_)) => {
+                    // Definition already exists, skip
+                    debug!("Definition already exists for term {}", term_id);
+                    continue;
+                }
+                Ok(None) => {
+                    // No definition, generate one
+                    match Term::find_by_id(&self.pool, &term_id).await {
+                        Ok(term) => {
+                            match def_generator
+                                .generate_and_store(&term.id, &term.lemma_en, &term.lemma_ja, None)
+                                .await
+                            {
+                                Ok(_) => {
+                                    info!("Generated definition for term {}", term.lemma_en);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to generate definition for {}: {}", term.lemma_en, e);
+                                    // Continue with other terms
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to find term {}: {}", term_id, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to check definition for term {}: {}", term_id, e);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

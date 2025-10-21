@@ -3,6 +3,7 @@ use crate::models::Paper;
 use crate::services::PaperProcessor;
 use axum::{
     extract::{Multipart, State},
+    http::{header, HeaderMap, StatusCode},
     Json,
 };
 use regex::Regex;
@@ -25,7 +26,7 @@ pub struct ImportResponse {
 pub async fn import_paper(
     State(pool): State<SqlitePool>,
     mut multipart: Multipart,
-) -> Result<Json<ImportResponse>, AppError> {
+) -> Result<(StatusCode, HeaderMap, Json<ImportResponse>), AppError> {
     let mut file_data: Option<Vec<u8>> = None;
     let mut url: Option<String> = None;
     let mut title: Option<String> = None;
@@ -90,7 +91,7 @@ async fn handle_file_upload(
     pool: &SqlitePool,
     file_data: Vec<u8>,
     title: Option<String>,
-) -> Result<Json<ImportResponse>, AppError> {
+) -> Result<(StatusCode, HeaderMap, Json<ImportResponse>), AppError> {
     // Validate PDF
     if file_data.len() > 100 * 1024 * 1024 {
         return Err(AppError::UnprocessableEntity(
@@ -137,11 +138,24 @@ async fn handle_file_upload(
         }
     });
 
-    Ok(Json(ImportResponse {
-        paper_id: paper.id,
-        status: "processing".to_string(),
-        message: "Paper imported successfully. Processing started.".to_string(),
-    }))
+    // Build Location header
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::LOCATION,
+        format!("/api/papers/{}", paper.id)
+            .parse()
+            .expect("Invalid header value"),
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        headers,
+        Json(ImportResponse {
+            paper_id: paper.id,
+            status: "processing".to_string(),
+            message: "Paper imported successfully. Processing started.".to_string(),
+        }),
+    ))
 }
 
 /// Handle arXiv URL import (data-model.md:326-454)
@@ -149,7 +163,7 @@ async fn handle_arxiv_import(
     pool: &SqlitePool,
     url: String,
     title: String,
-) -> Result<Json<ImportResponse>, AppError> {
+) -> Result<(StatusCode, HeaderMap, Json<ImportResponse>), AppError> {
     // Validate arXiv URL format
     let arxiv_regex = Regex::new(r"^https://(www\.)?arxiv\.org/abs/\d{4}\.\d{4,5}(v\d+)?$")
         .expect("Invalid regex");
@@ -243,9 +257,22 @@ async fn handle_arxiv_import(
         }
     });
 
-    Ok(Json(ImportResponse {
-        paper_id: paper.id,
-        status: "processing".to_string(),
-        message: "Paper imported successfully. Processing started.".to_string(),
-    }))
+    // Build Location header
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::LOCATION,
+        format!("/api/papers/{}", paper.id)
+            .parse()
+            .expect("Invalid header value"),
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        headers,
+        Json(ImportResponse {
+            paper_id: paper.id,
+            status: "processing".to_string(),
+            message: "Paper imported successfully. Processing started.".to_string(),
+        }),
+    ))
 }

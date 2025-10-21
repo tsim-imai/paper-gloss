@@ -49,13 +49,6 @@ pub async fn get_translation(
     let chunk_responses: Vec<ChunkResponse> = chunks
         .into_iter()
         .map(|chunk| {
-            let has_translation = chunk.trans_html.is_some();
-            let status = if has_translation {
-                "translated"
-            } else {
-                "pending"
-            };
-
             ChunkResponse {
                 id: chunk.id,
                 paper_id: chunk.paper_id,
@@ -63,9 +56,9 @@ pub async fn get_translation(
                 original_text: chunk.src_text,
                 translated_text: chunk.trans_html,
                 content_hash: chunk.content_hash,
-                status: status.to_string(),
-                retry_count: 0, // Not implemented yet
-                error_message: None, // Not implemented yet
+                status: chunk.status,
+                retry_count: chunk.retry_count,
+                error_message: chunk.error_message,
                 created_at: chunk.created_at.to_rfc3339(),
                 updated_at: chunk.updated_at.to_rfc3339(),
             }

@@ -14,6 +14,9 @@ pub struct Chunk {
     pub trans_html: Option<String>,
     pub content_hash: String,
     pub token_count: Option<i32>,
+    pub status: String,
+    pub retry_count: i32,
+    pub error_message: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -33,8 +36,8 @@ impl Chunk {
 
         sqlx::query_as::<_, Chunk>(
             r#"
-            INSERT INTO chunks (id, paper_id, index_, src_text, trans_html, content_hash, token_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)
+            INSERT INTO chunks (id, paper_id, index_, src_text, trans_html, content_hash, token_count, status, retry_count, error_message, created_at, updated_at)
+            VALUES (?, ?, ?, ?, NULL, ?, ?, 'pending', 0, NULL, ?, ?)
             RETURNING *
             "#,
         )
@@ -84,7 +87,7 @@ impl Chunk {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            UPDATE chunks SET trans_html = ?, updated_at = ?
+            UPDATE chunks SET trans_html = ?, status = 'translated', updated_at = ?
             WHERE id = ?
             "#,
         )
@@ -126,13 +129,12 @@ impl Chunk {
         Ok(count.0)
     }
 
-    /// Count failed chunks for a paper (trans_html is NULL after processing)
+    /// Count failed chunks for a paper
     pub async fn count_failed_by_paper_id(pool: &SqlitePool, paper_id: &str) -> Result<i64, sqlx::Error> {
-        // This is a simplified implementation - in production, you'd track failure state explicitly
         let count: (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*) FROM chunks
-            WHERE paper_id = ? AND trans_html IS NULL
+            WHERE paper_id = ? AND status = 'failed'
             "#,
         )
         .bind(paper_id)
@@ -150,6 +152,45 @@ impl Chunk {
             "#,
         )
         .bind(paper_id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update chunk status and error message
+    pub async fn update_status(
+        pool: &SqlitePool,
+        id: &str,
+        status: &str,
+        error_message: Option<String>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE chunks SET status = ?, error_message = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(status)
+        .bind(error_message)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment retry count for a chunk
+    pub async fn increment_retry(pool: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE chunks SET retry_count = retry_count + 1, updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(Utc::now())
+        .bind(id)
         .execute(pool)
         .await?;
 

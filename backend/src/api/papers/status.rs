@@ -57,24 +57,60 @@ pub async fn get_paper_status(
         .await
         .unwrap_or(0);
 
+    // Count terms and definitions
+    let total_terms: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(DISTINCT term_id) FROM occurrences
+        WHERE paper_id = ?
+        "#,
+    )
+    .bind(&paper_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap_or(0);
+
+    let completed_definitions: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(DISTINCT d.term_id) FROM definitions d
+        INNER JOIN occurrences o ON d.term_id = o.term_id
+        WHERE o.paper_id = ?
+        "#,
+    )
+    .bind(&paper_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap_or(0);
+
+    // Determine extraction status
+    let extraction_status = if total_chunks > 0 {
+        "completed"
+    } else {
+        "pending"
+    };
+
+    // Determine term extraction status
+    let term_extraction_status = if total_terms > 0 {
+        "completed"
+    } else if total_chunks > 0 && completed_chunks > 0 {
+        "processing"
+    } else {
+        "pending"
+    };
+
     Ok(Json(ProcessingStatusResponse {
         paper_id,
         status: paper.status.to_string(),
         progress: ProcessingProgress {
-            extraction: if total_chunks > 0 {
-                "completed".to_string()
-            } else {
-                "pending".to_string()
-            },
+            extraction: extraction_status.to_string(),
             translation: TranslationProgress {
                 total_chunks,
                 completed_chunks,
                 failed_chunks,
             },
-            term_extraction: "pending".to_string(), // Will be implemented in Phase 4
+            term_extraction: term_extraction_status.to_string(),
             definitions: DefinitionProgress {
-                total_terms: 0,         // Will be implemented in Phase 4
-                completed_definitions: 0, // Will be implemented in Phase 4
+                total_terms,
+                completed_definitions,
             },
         },
     }))
