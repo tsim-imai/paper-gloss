@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+use sqlx::SqlitePool;
 
 /// Test helper to spawn the backend server binary on a free port with a temp DB
 pub struct TestServer {
@@ -72,6 +73,17 @@ impl TestServer {
         wait_for_health(&base, Duration::from_secs(10)).await?;
 
         Ok(Self { base_url: base, child, _db_path: db_path })
+    }
+
+    /// Database URL (sqlite://...)
+    pub fn database_url(&self) -> String {
+        format!("sqlite://{}", self._db_path.display())
+    }
+
+    /// Connect to the same SQLite database the server is using
+    pub async fn connect_db(&self) -> anyhow::Result<SqlitePool> {
+        let pool = SqlitePool::connect(&self.database_url()).await?;
+        Ok(pool)
     }
 }
 

@@ -84,33 +84,96 @@ impl Default for TranslationService {
 }
 
 fn preserve_tokens(src: &str, out: &str) -> String {
-    let mut result = out.to_string();
-
-    // Patterns to preserve
-    let math_re = Regex::new(r"\$[^$]+\$").unwrap();
-    let eq_re = Regex::new(r"Eq\. \(\d+\)").unwrap();
-    let fig_re = Regex::new(r"\[Fig\. \d+\]").unwrap();
-
-    // Collect unique tokens from source
-    let mut tokens: Vec<String> = Vec::new();
-    for m in math_re.find_iter(src) { tokens.push(src[m.start()..m.end()].to_string()); }
-    for m in eq_re.find_iter(src) { tokens.push(src[m.start()..m.end()].to_string()); }
-    for m in fig_re.find_iter(src) { tokens.push(src[m.start()..m.end()].to_string()); }
-
-    // Deduplicate while preserving order
-    let mut seen = std::collections::HashSet::new();
-    let mut extras: Vec<String> = Vec::new();
-    for t in tokens.into_iter() {
-        if seen.insert(t.clone()) {
-            if !result.contains(&t) {
-                extras.push(t);
-            }
-        }
+    #[derive(Clone)]
+    struct Segment {
+        text: String,
+        start: usize,
     }
 
-    if !extras.is_empty() {
-        result.push(' ');
-        result.push_str(&extras.join(" "));
+    fn collect_segments(src: &str) -> Vec<Segment> {
+        let mut segments: Vec<Segment> = Vec::new();
+
+        let push_unique = |segments: &mut Vec<Segment>, text: String, start: usize| {
+            if segments.iter().any(|seg| seg.text == text) {
+                return;
+            }
+            segments.push(Segment { text, start });
+        };
+
+        let math_re = Regex::new(r"\$[^$]+\$").unwrap();
+        for mat in math_re.find_iter(src) {
+            push_unique(
+                &mut segments,
+                src[mat.start()..mat.end()].to_string(),
+                mat.start(),
+            );
+        }
+
+        let eq_re = Regex::new(r"Eq\.\s*\(\d+\)").unwrap();
+        for mat in eq_re.find_iter(src) {
+            push_unique(
+                &mut segments,
+                src[mat.start()..mat.end()].to_string(),
+                mat.start(),
+            );
+        }
+
+        let bracket_re = Regex::new(r"\[[A-Za-z]+\.\s*\d+\]").unwrap();
+        for mat in bracket_re.find_iter(src) {
+            push_unique(
+                &mut segments,
+                src[mat.start()..mat.end()].to_string(),
+                mat.start(),
+            );
+        }
+
+        segments.sort_by_key(|seg| seg.start);
+        segments
+    }
+
+    fn insert_with_context(result: &mut String, segment: &Segment, src: &str) {
+        if result.contains(&segment.text) {
+            return;
+        }
+
+        // Try to anchor after preceding context (last 24 chars).
+        if segment.start > 0 {
+            let anchor_start = segment.start.saturating_sub(24);
+            let anchor = &src[anchor_start..segment.start];
+            let trimmed_anchor = anchor.trim_start_matches(|c: char| c.is_whitespace());
+            if trimmed_anchor.len() > 1 {
+                if let Some(pos) = result.rfind(trimmed_anchor) {
+                    let insert_pos = pos + trimmed_anchor.len();
+                    result.insert_str(insert_pos, segment.text.as_str());
+                    return;
+                }
+            }
+        }
+
+        // Try to anchor before following context (next 24 chars).
+        let after_start = segment.start + segment.text.len();
+        if after_start < src.len() {
+            let after_end = (after_start + 24).min(src.len());
+            let anchor = &src[after_start..after_end];
+            let trimmed_anchor = anchor.trim_end_matches(|c: char| c.is_whitespace());
+            if trimmed_anchor.len() > 1 {
+                if let Some(pos) = result.find(trimmed_anchor) {
+                    result.insert_str(pos, segment.text.as_str());
+                    return;
+                }
+            }
+        }
+
+        // Fallback: append at the end separated by a space.
+        if !result.ends_with(char::is_whitespace) {
+            result.push(' ');
+        }
+        result.push_str(segment.text.as_str());
+    }
+
+    let mut result = out.to_string();
+    for segment in collect_segments(src) {
+        insert_with_context(&mut result, &segment, src);
     }
 
     result

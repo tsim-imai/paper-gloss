@@ -80,53 +80,69 @@ impl Term {
     }
 
     /// Search terms by lemma (English or Japanese)
+    /// Also searches in term_variants for better matching
     pub async fn search(
         pool: &SqlitePool,
         query: &str,
         lang: &str,
         limit: i64,
     ) -> Result<Vec<Self>, sqlx::Error> {
+        // Use LIKE pattern for normalized query
+        let like_pattern = format!("%{}%", query);
+
         match lang {
             "en" => {
+                // Search in both lemma and term_variants
                 sqlx::query_as::<_, Term>(
                     r#"
-                    SELECT * FROM terms
-                    WHERE lemma_en LIKE ?
-                    ORDER BY lemma_en
+                    SELECT DISTINCT t.* FROM terms t
+                    LEFT JOIN term_variants tv ON tv.term_id = t.id
+                    WHERE t.lemma_en LIKE ?
+                       OR (tv.lang = 'en' AND tv.surface LIKE ?)
+                    ORDER BY t.lemma_en
                     LIMIT ?
                     "#,
                 )
-                .bind(format!("%{}%", query))
+                .bind(&like_pattern)
+                .bind(&like_pattern)
                 .bind(limit)
                 .fetch_all(pool)
                 .await
             }
             "ja" => {
+                // Search in both lemma and term_variants
                 sqlx::query_as::<_, Term>(
                     r#"
-                    SELECT * FROM terms
-                    WHERE lemma_ja LIKE ?
-                    ORDER BY lemma_ja
+                    SELECT DISTINCT t.* FROM terms t
+                    LEFT JOIN term_variants tv ON tv.term_id = t.id
+                    WHERE t.lemma_ja LIKE ?
+                       OR (tv.lang = 'ja' AND tv.surface LIKE ?)
+                    ORDER BY t.lemma_ja
                     LIMIT ?
                     "#,
                 )
-                .bind(format!("%{}%", query))
+                .bind(&like_pattern)
+                .bind(&like_pattern)
                 .bind(limit)
                 .fetch_all(pool)
                 .await
             }
             _ => {
-                // Search both languages
+                // Search both languages and all variants
                 sqlx::query_as::<_, Term>(
                     r#"
-                    SELECT * FROM terms
-                    WHERE lemma_en LIKE ? OR lemma_ja LIKE ?
-                    ORDER BY lemma_en
+                    SELECT DISTINCT t.* FROM terms t
+                    LEFT JOIN term_variants tv ON tv.term_id = t.id
+                    WHERE t.lemma_en LIKE ?
+                       OR t.lemma_ja LIKE ?
+                       OR tv.surface LIKE ?
+                    ORDER BY t.lemma_en
                     LIMIT ?
                     "#,
                 )
-                .bind(format!("%{}%", query))
-                .bind(format!("%{}%", query))
+                .bind(&like_pattern)
+                .bind(&like_pattern)
+                .bind(&like_pattern)
                 .bind(limit)
                 .fetch_all(pool)
                 .await

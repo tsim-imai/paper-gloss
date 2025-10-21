@@ -17,6 +17,8 @@ mod test_paper_process;
 
 #[path = "contract/test_chunk_retry.rs"]
 mod test_chunk_retry;
+#[path = "contract/test_chunk_retry_success.rs"]
+mod test_chunk_retry_success;
 
 #[path = "contract/test_term_detail.rs"]
 mod test_term_detail;
@@ -41,9 +43,16 @@ mod test_term_merge;
 
 #[path = "contract/test_term_define.rs"]
 mod test_term_define;
+#[path = "contract/test_term_define_not_found.rs"]
+mod test_term_define_not_found;
 
 #[path = "contract/test_term_merge_validation.rs"]
 mod test_term_merge_validation;
 
 #[path = "contract/test_term_list_validation.rs"]
 mod test_term_list_validation;
+
+#[path = "contract/test_term_search_normalization.rs"]
+mod test_term_search_normalization;
+#[path = "contract/test_translation_order.rs"]
+mod test_translation_order;

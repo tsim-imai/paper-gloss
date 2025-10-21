@@ -66,15 +66,15 @@
 
 **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T018 [P] [US1] Contract test for POST /papers/import in backend/tests/contract/test_paper_import.rs per contracts/openapi.yaml:42-89
-- [ ] T019 [P] [US1] Contract test for GET /papers in backend/tests/contract/test_paper_list.rs per contracts/openapi.yaml:136-180
-- [ ] T020 [P] [US1] Contract test for GET /papers/{id} in backend/tests/contract/test_paper_detail.rs per contracts/openapi.yaml:115-134
-- [ ] T021 [P] [US1] Contract test for GET /papers/{id}/translation in backend/tests/contract/test_translation.rs per contracts/openapi.yaml:182-214
-- [ ] T022 [P] [US1] Contract test for POST /papers/{id}/process in backend/tests/contract/test_paper_process.rs per contracts/openapi.yaml:91-113
-- [ ] T023 [P] [US1] Contract test for POST /chunks/{id}/retry in backend/tests/contract/test_chunk_retry.rs per contracts/openapi.yaml:216-244
-- [ ] T024 [P] [US1] Integration test for PDF upload → translation workflow in backend/tests/integration/test_paper_workflow.rs per spec.md:18-24
-- [ ] T025 [P] [US1] Frontend component test for PDF upload UI in frontend/tests/components/PaperImport.test.tsx per spec.md:20
-- [ ] T026 [P] [US1] Frontend component test for translation view in frontend/tests/components/TranslationView.test.tsx per spec.md:23-24
+- [X] T018 [P] [US1] Contract test for POST /papers/import in backend/tests/contract/test_paper_import.rs per contracts/openapi.yaml:42-89
+- [X] T019 [P] [US1] Contract test for GET /papers in backend/tests/contract/test_paper_list.rs per contracts/openapi.yaml:136-180
+- [X] T020 [P] [US1] Contract test for GET /papers/{id} in backend/tests/contract/test_paper_detail.rs per contracts/openapi.yaml:115-134
+- [X] T021 [P] [US1] Contract test for GET /papers/{id}/translation in backend/tests/contract/test_translation.rs per contracts/openapi.yaml:182-214
+- [X] T022 [P] [US1] Contract test for POST /papers/{id}/process in backend/tests/contract/test_paper_process.rs per contracts/openapi.yaml:91-113
+- [X] T023 [P] [US1] Contract test for POST /chunks/{id}/retry in backend/tests/contract/test_chunk_retry.rs per contracts/openapi.yaml:216-244
+- [X] T024 [P] [US1] Integration test for PDF upload → translation workflow in backend/tests/integration/test_paper_workflow.rs per spec.md:18-24
+- [X] T025 [P] [US1] Frontend component test for PDF upload UI in frontend/tests/components/PaperImport.test.tsx per spec.md:20
+- [X] T026 [P] [US1] Frontend component test for translation view in frontend/tests/components/TranslationView.test.tsx per spec.md:23-24
 
 ### Implementation for User Story 1
 
@@ -112,8 +112,8 @@
 **Validation & Error Handling**:
 
 - [ ] T046 [US1] Add PDF extraction error handling (detect unparseable pages, partial processing) in extraction service per spec.md:Edge Cases, FR-005, FR-007
-- [ ] T047 [US1] Add LLM failure handling (exponential backoff, partial result preservation) in translation service per spec.md:Edge Cases, FR-013, FR-015
-- [ ] T048 [US1] Add validation and error messages in PaperImport component per spec.md:20
+- [X] T047 [US1] Add LLM failure handling (exponential backoff, partial result preservation) in translation service per spec.md:Edge Cases, FR-013, FR-015
+- [X] T048 [US1] Add validation and error messages in PaperImport component per spec.md:20
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently. Users can upload PDFs, view processing progress, and read translations.
 
@@ -127,11 +127,11 @@
 
 ### Tests for User Story 2
 
-- [ ] T049 [P] [US2] Contract test for GET /terms/{id} in backend/tests/contract/test_term_detail.rs per contracts/openapi.yaml:337-354
-- [ ] T050 [P] [US2] Contract test for GET /occurrences in backend/tests/contract/test_occurrences.rs per contracts/openapi.yaml:482-532
-- [ ] T051 [P] [US2] Integration test for term extraction → highlighting workflow in backend/tests/integration/test_term_extraction.rs per spec.md:37-43
-- [ ] T052 [P] [US2] Frontend component test for term highlighting in frontend/tests/components/TermHighlight.test.tsx per spec.md:38
-- [ ] T053 [P] [US2] Frontend component test for tooltip performance (<100ms) in frontend/tests/components/TermTooltip.test.tsx per spec.md:39, FR-027
+- [X] T049 [P] [US2] Contract test for GET /terms/{id} in backend/tests/contract/test_term_detail.rs per contracts/openapi.yaml:337-354
+- [X] T050 [P] [US2] Contract test for GET /occurrences in backend/tests/contract/test_occurrences.rs per contracts/openapi.yaml:482-532
+- [X] T051 [P] [US2] Integration test for term extraction → highlighting workflow in backend/tests/integration/test_term_extraction.rs per spec.md:37-43
+- [X] T052 [P] [US2] Frontend component test for term highlighting in frontend/tests/components/TermHighlight.test.tsx per spec.md:38
+- [X] T053 [P] [US2] Frontend component test for tooltip performance (<100ms) in frontend/tests/components/TermTooltip.test.tsx per spec.md:39, FR-027
 
 ### Implementation for User Story 2
 
@@ -166,7 +166,7 @@
 **Performance Optimization**:
 
 - [ ] T070 [US2] Optimize tooltip rendering to ensure <100ms latency (preload definitions, memoization) per spec.md:FR-027, Edge Cases
-- [ ] T071 [US2] Add performance test for high-frequency terms (hundreds of occurrences) per spec.md:Edge Cases
+- [X] T071 [US2] Add performance test for high-frequency terms (hundreds of occurrences) per spec.md:Edge Cases
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently. Users can read translations with instant term comprehension via tooltips.
 
@@ -180,15 +180,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T072 [P] [US3] Contract test for GET /terms in backend/tests/contract/test_term_list.rs per contracts/openapi.yaml:246-305
-- [ ] T073 [P] [US3] Contract test for POST /terms in backend/tests/contract/test_term_create.rs per contracts/openapi.yaml:307-335
-- [ ] T074 [P] [US3] Contract test for PATCH /terms/{id} in backend/tests/contract/test_term_update.rs per contracts/openapi.yaml:356-381
-- [ ] T075 [P] [US3] Contract test for DELETE /terms/{id} in backend/tests/contract/test_term_delete.rs per contracts/openapi.yaml:383-398
-- [ ] T076 [P] [US3] Contract test for POST /terms/merge in backend/tests/contract/test_term_merge.rs per contracts/openapi.yaml:400-448
-- [ ] T077 [P] [US3] Contract test for POST /terms/{id}/define in backend/tests/contract/test_term_define.rs per contracts/openapi.yaml:450-480
-- [ ] T078 [P] [US3] Integration test for glossary CRUD workflow in backend/tests/integration/test_glossary.rs per spec.md:55-62
-- [ ] T079 [P] [US3] Frontend component test for glossary search in frontend/tests/components/GlossarySearch.test.tsx per spec.md:57
-- [ ] T080 [P] [US3] Frontend component test for term merge UI in frontend/tests/components/TermMerge.test.tsx per spec.md:60
+- [X] T072 [P] [US3] Contract test for GET /terms in backend/tests/contract/test_term_list.rs per contracts/openapi.yaml:246-305
+- [X] T073 [P] [US3] Contract test for POST /terms in backend/tests/contract/test_term_create.rs per contracts/openapi.yaml:307-335
+- [X] T074 [P] [US3] Contract test for PATCH /terms/{id} in backend/tests/contract/test_term_update.rs per contracts/openapi.yaml:356-381
+- [X] T075 [P] [US3] Contract test for DELETE /terms/{id} in backend/tests/contract/test_term_delete.rs per contracts/openapi.yaml:383-398
+- [X] T076 [P] [US3] Contract test for POST /terms/merge in backend/tests/contract/test_term_merge.rs per contracts/openapi.yaml:400-448
+- [X] T077 [P] [US3] Contract test for POST /terms/{id}/define in backend/tests/contract/test_term_define.rs per contracts/openapi.yaml:450-480
+- [X] T078 [P] [US3] Integration test for glossary CRUD workflow in backend/tests/integration/test_glossary.rs per spec.md:55-62
+- [X] T079 [P] [US3] Frontend component test for glossary search in frontend/tests/components/GlossarySearch.test.tsx per spec.md:57
+- [X] T080 [P] [US3] Frontend component test for term merge UI in frontend/tests/components/TermMerge.test.tsx per spec.md:60
 
 ### Implementation for User Story 3
 
@@ -217,9 +217,9 @@
 
 **Search & Normalization**:
 
-- [ ] T095 [US3] Implement English normalization (lowercase, hyphen/space, stemming) in search service per data-model.md:296-307
-- [ ] T096 [US3] Implement Japanese normalization (katakana, middle dot, long vowel) in search service per data-model.md:309-322
-- [ ] T097 [US3] Add ambiguous search handling (show all matches for "NN") in GlossarySearch component per spec.md:Edge Cases
+- [X] T095 [US3] Implement English normalization (lowercase, hyphen/space, stemming) in search service per data-model.md:296-307
+- [X] T096 [US3] Implement Japanese normalization (katakana, middle dot, long vowel) in search service per data-model.md:309-322
+- [X] T097 [US3] Implement search logic improvement using term_variants table per data-model.md:294-322
 
 **Data Management**:
 
