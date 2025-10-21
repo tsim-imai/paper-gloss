@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
-import { TermListItem } from '../../types'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { TermListItem, TermDetail } from '../../types'
+import { apiClient } from '../../services/api'
+import TermDefinitionRegenerate from './TermDefinitionRegenerate'
 
 interface TermFormProps {
   term?: TermListItem | null
@@ -29,6 +32,19 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
     note: '',
   })
 
+  const queryClient = useQueryClient()
+
+  // Fetch term details including definition when editing
+  const { data: termDetail } = useQuery({
+    queryKey: ['term', term?.id],
+    queryFn: async () => {
+      if (!term?.id) return null
+      const response = await apiClient.getTerm(term.id)
+      return response.data as TermDetail
+    },
+    enabled: !!term?.id,
+  })
+
   useEffect(() => {
     if (term) {
       setFormData({
@@ -45,6 +61,12 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSubmit(formData)
+  }
+
+  const handleDefinitionUpdated = () => {
+    // Invalidate the query to refresh the term details
+    queryClient.invalidateQueries({ queryKey: ['term', term?.id] })
+    queryClient.invalidateQueries({ queryKey: ['terms'] })
   }
 
   const isEditing = !!term
@@ -225,6 +247,21 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             }}
           />
         </div>
+
+        {/* Definition regeneration (only when editing) */}
+        {isEditing && termDetail && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <TermDefinitionRegenerate
+              term={{
+                id: termDetail.id,
+                lemma_en: termDetail.lemma_en,
+                lemma_ja: termDetail.lemma_ja,
+                definition: termDetail.definition,
+              }}
+              onDefinitionUpdated={handleDefinitionUpdated}
+            />
+          </div>
+        )}
 
         {/* Buttons */}
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>

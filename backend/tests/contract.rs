@@ -28,6 +28,8 @@ mod test_occurrences;
 
 #[path = "contract/test_term_list.rs"]
 mod test_term_list;
+#[path = "contract/test_term_list_sorting.rs"]
+mod test_term_list_sorting;
 
 #[path = "contract/test_term_create.rs"]
 mod test_term_create;

@@ -85,7 +85,8 @@ impl TermSearchService {
         limit: i64,
     ) -> Result<(Vec<TermSearchResult>, i64)> {
         let total = Term::count(&self.pool).await?;
-        let terms = Term::list(&self.pool, page, limit).await?;
+        // Fetch all terms to allow proper global sorting, then paginate
+        let terms = Term::list_all(&self.pool).await?;
 
         let mut results = Vec::new();
         for term in terms {
@@ -98,7 +99,16 @@ impl TermSearchService {
 
         self.sort_results(&mut results, sort);
 
-        Ok((results, total))
+        // Apply pagination after global sort
+        let offset = ((page - 1) * limit) as usize;
+        let end = ((page * limit) as usize).min(results.len());
+        let paginated = if offset < results.len() {
+            results[offset..end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        Ok((paginated, total))
     }
 
     /// Normalize query based on language
@@ -145,6 +155,9 @@ impl TermSearchService {
                         .cmp(&a.occurrence_count)
                         .then_with(|| a.term.lemma_en.cmp(&b.term.lemma_en))
                 });
+            }
+            "recent" => {
+                results.sort_by(|a, b| b.term.updated_at.cmp(&a.term.updated_at));
             }
             _ => {
                 // Default: alphabetical by English lemma

@@ -225,7 +225,7 @@
 
 - [ ] T098 [US3] Implement glossary export (JSON/CSV) in backend/src/services/export.rs per spec.md:FR-035
 - [ ] T099 [US3] Add export UI in GlossaryPanel component per spec.md:FR-035
-- [ ] T100 [US3] Implement definition regeneration with user confirmation per spec.md:61
+- [X] T100 [US3] Implement definition regeneration with user confirmation per spec.md:61
 
 **Checkpoint**: All user stories should now be independently functional. Complete glossary management is available.
 

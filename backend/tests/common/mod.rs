@@ -85,6 +85,46 @@ impl TestServer {
         let pool = SqlitePool::connect(&self.database_url()).await?;
         Ok(pool)
     }
+
+    /// Get the database file path
+    pub fn db_path(&self) -> &PathBuf {
+        &self._db_path
+    }
+
+    /// Spawn server with a specific database file (for persistence testing)
+    pub async fn spawn_with_db_path(db_path: PathBuf) -> anyhow::Result<Self> {
+        // Pick a free port
+        let port = portpicker::pick_unused_port().expect("no free ports available");
+        let host = "127.0.0.1";
+
+        let database_url = format!("sqlite://{}", db_path.display());
+
+        // Resolve binary path
+        let bin = resolve_binary_path();
+        anyhow::ensure!(bin.exists(), "backend binary not found at {:?}", bin);
+
+        // Spawn server
+        let child = Command::new(bin)
+            .env("HOST", host)
+            .env("PORT", port.to_string())
+            .env("DATABASE_URL", database_url)
+            .env("RUST_LOG", "debug")
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()?;
+
+        let base = format!("http://{}:{}", host, port);
+        // Wait for /health to be ready
+        wait_for_health(&base, Duration::from_secs(10)).await?;
+
+        Ok(Self { base_url: base, child, _db_path: db_path })
+    }
+
+    /// Stop the server gracefully
+    pub fn stop(mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 impl Drop for TestServer {

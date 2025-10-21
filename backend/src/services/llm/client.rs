@@ -460,4 +460,77 @@ mod tests {
 
         assert!(m.hits() >= 3, "expected at least 3 retry attempts, got {}", m.hits());
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn fr015_honors_retry_after_header_seconds() {
+        use httpmock::Mock;
+        use std::time::Instant;
+        let server = MockServer::start_async().await;
+
+        // Return 429 with Retry-After: 1 (1 second)
+        let m: Mock = server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(429)
+                    .header("Retry-After", "1")
+                    .json_body(json!({
+                        "error": {"message": "rate limit", "type": "rate_limit"}
+                    }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+        let client = LlmClient::new().unwrap();
+
+        let start = Instant::now();
+        let _ = client
+            .chat_completion(vec![Message { role: "user".into(), content: "hello".into() }], None, Some(8))
+            .await
+            .err();
+        let elapsed = start.elapsed();
+
+        // Should wait at least 1 second for the first retry
+        assert!(m.hits() >= 2, "expected at least 2 attempts, got {}", m.hits());
+        assert!(elapsed >= Duration::from_secs(1), "expected to wait at least 1 second, but only waited {:?}", elapsed);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn fr015_honors_retry_after_header_http_date() {
+        use httpmock::Mock;
+        use std::time::{Instant, SystemTime};
+        let server = MockServer::start_async().await;
+
+        // Return 429 with Retry-After as HTTP-date (1 second in future)
+        let future_time = SystemTime::now() + Duration::from_secs(1);
+        let http_date = httpdate::fmt_http_date(future_time);
+
+        let m: Mock = server
+            .mock_async(move |when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(429)
+                    .header("Retry-After", http_date.clone())
+                    .json_body(json!({
+                        "error": {"message": "rate limit", "type": "rate_limit"}
+                    }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+        let client = LlmClient::new().unwrap();
+
+        let start = Instant::now();
+        let _ = client
+            .chat_completion(vec![Message { role: "user".into(), content: "hello".into() }], None, Some(8))
+            .await
+            .err();
+        let elapsed = start.elapsed();
+
+        // Should wait approximately 1 second for the first retry
+        assert!(m.hits() >= 2, "expected at least 2 attempts, got {}", m.hits());
+        assert!(elapsed >= Duration::from_millis(900), "expected to wait at least 900ms, but only waited {:?}", elapsed);
+    }
 }

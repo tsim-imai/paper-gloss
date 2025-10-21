@@ -170,6 +170,18 @@ impl Term {
         .await
     }
 
+    /// List all terms (no pagination) for global sorting cases
+    pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as::<_, Term>(
+            r#"
+            SELECT * FROM terms
+            ORDER BY lemma_en
+            "#,
+        )
+        .fetch_all(pool)
+        .await
+    }
+
     /// Count total terms
     pub async fn count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
         let count: (i64,) = sqlx::query_as(
