@@ -1,7 +1,8 @@
 use crate::models::{Chunk, Paper, PaperStatus, Term};
 use crate::services::llm::{LlmClient, LlmLogger};
 use crate::services::pdf::{PdfExtractor, TextChunker};
-use crate::services::terms::{TermExtractor, OccurrenceTracker, DefinitionGenerator};
+use crate::services::terms::{TermExtractor, OccurrenceTracker, DefinitionGenerator, TermTagger};
+use crate::services::terms::{strip_sentinels, TagInfo};
 use crate::services::translation::TranslationService;
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
@@ -108,46 +109,85 @@ impl PaperProcessor {
             .context("Failed to create chunk")?;
         }
 
-        // Step 5: Translate chunks in parallel (FR-014)
+        // Step 5: LLM-assisted tagging on English source (parallel)
+        use futures::stream::{self, StreamExt};
+        let tagger = TermTagger::new(self.llm_client.clone());
+        info!("Tagging terms in {} chunks for paper {}", chunks.len(), paper_id);
+        let source_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+        let conc: usize = std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
+        let tagging_results: Vec<_> = stream::iter(source_texts.into_iter())
+            .map(|text| {
+                let tagger = tagger.clone();
+                async move { tagger.annotate(&text, None).await }
+            })
+            .buffer_unordered(conc)
+            .collect()
+            .await;
+
+        let mut tagged_en_list: Vec<String> = Vec::with_capacity(chunks.len());
+        let mut tag_meta_list: Vec<std::collections::HashMap<String, TagInfo>> = Vec::with_capacity(chunks.len());
+        for (i, res) in tagging_results.into_iter().enumerate() {
+            match res {
+                Ok(tagged) => {
+                    tagged_en_list.push(tagged.tagged_text.clone());
+                    let mut map = std::collections::HashMap::new();
+                    for t in tagged.tags { map.insert(t.id.clone(), t); }
+                    tag_meta_list.push(map);
+                }
+                Err(e) => {
+                    warn!("Tagging failed for chunk {}: {} (falling back to untagged)", i, e);
+                    tagged_en_list.push(chunks[i].text.clone());
+                    tag_meta_list.push(std::collections::HashMap::new());
+                }
+            }
+        }
+
+        // Step 6: Translate tagged chunks in parallel (FR-014)
         let llm_logger = LlmLogger::new(paper_id)?;
+        info!("Translating {} tagged chunks for paper {}", tagged_en_list.len(), paper_id);
+        let results = self.translation_service.translate_tagged_chunks(tagged_en_list.clone()).await;
 
-        // Collect chunk texts for parallel processing
-        let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
-
-        info!("Translating {} chunks in parallel for paper {}", chunk_texts.len(), paper_id);
-
-        // Translate all chunks in parallel (up to 10 concurrent per FR-014)
-        let results = self.translation_service.translate_chunks(chunk_texts).await;
-
-        // Process translation results
+        // Process translation results → render HTML and store occurrences
         let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
 
         for (index, result) in results.into_iter().enumerate() {
             let chunk = &chunks[index];
             let db_chunk = db_chunks.get(index);
-
+            
             if let Some(db_chunk) = db_chunk {
                 match result {
                     Ok(translation_result) => {
-                        Chunk::update_translation(
-                            &self.pool,
+                        // Render HTML and create occurrences from tagged JA text
+                        let meta_map = &tag_meta_list[index];
+                        let html = self.render_html_and_occurrences(
+                            paper_id,
                             &db_chunk.id,
-                            translation_result.translated_text.clone(),
+                            &tagged_en_list[index],
+                            &translation_result.translated_text,
+                            meta_map,
                         )
-                        .await?;
+                        .await
+                        .unwrap_or_else(|e| {
+                            warn!("Failed to render occurrences for chunk {}: {}", chunk.index, e);
+                            // Fallback: strip tags to plain text
+                            strip_sentinels(&translation_result.translated_text)
+                        });
 
-                        // Log successful translation
+                        Chunk::update_translation(&self.pool, &db_chunk.id, html.clone()).await?;
+
                         llm_logger
                             .log_translation(
                                 &db_chunk.id,
                                 &chunk.text,
-                                Some(&translation_result.translated_text),
+                                Some(&html),
                                 None,
                                 translation_result.duration.as_millis(),
                             )
                             .ok();
 
-                        debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
+                        debug!("Translated (tagged) chunk {} for paper {}", chunk.index, paper_id);
+                        // Recalculate and update paper status immediately
+                        let _ = self.recalc_paper_status(paper_id).await;
                     }
                     Err(e) => {
                         warn!("Translation failed for chunk {}: {}", chunk.index, e);
@@ -166,6 +206,8 @@ impl PaperProcessor {
                             )
                             .ok();
 
+                        // Recalculate and update paper status (may become failed if all failed)
+                        let _ = self.recalc_paper_status(paper_id).await;
                         // FR-033: Preserve partial results - continue processing other chunks
                     }
                 }
@@ -182,21 +224,9 @@ impl PaperProcessor {
             return Ok(());
         }
 
-        // Step 6: Extract terms from source text (FR-017)
-        info!("Extracting terms from paper {}", paper_id);
-        if let Err(e) = self.extract_terms(paper_id).await {
-            warn!("Term extraction failed for paper {}: {}", paper_id, e);
-            // Continue anyway - translation is more critical
-        }
+        // Step 7/8: Term extraction + occurrences はタグ由来のため完了済み
 
-        // Step 7: Track term occurrences in translated text
-        info!("Tracking term occurrences for paper {}", paper_id);
-        if let Err(e) = self.track_occurrences(paper_id).await {
-            warn!("Occurrence tracking failed for paper {}: {}", paper_id, e);
-            // Continue anyway
-        }
-
-        // Step 8: Generate definitions for extracted terms
+        // Step 9: Generate definitions for extracted terms
         info!("Generating definitions for paper {}", paper_id);
         if let Err(e) = self.generate_definitions(paper_id).await {
             warn!("Definition generation failed for paper {}: {}", paper_id, e);
@@ -281,22 +311,21 @@ impl PaperProcessor {
         Ok(())
     }
 
-    /// Track term occurrences in translated chunks
+    /// Track term occurrences in source text (English)
     async fn track_occurrences(&self, paper_id: &str) -> Result<()> {
         let tracker = OccurrenceTracker::new(self.pool.clone());
 
         let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
 
         for chunk in chunks {
-            if let Some(trans_html) = &chunk.trans_html {
-                match tracker.track_occurrences(paper_id, &chunk.id, trans_html).await {
-                    Ok(count) => {
-                        debug!("Tracked {} occurrences in chunk {}", count, chunk.id);
-                    }
-                    Err(e) => {
-                        warn!("Failed to track occurrences in chunk {}: {}", chunk.id, e);
-                        // Continue with other chunks
-                    }
+            // Track occurrences in source (English) text since terms are extracted from English
+            match tracker.track_occurrences(paper_id, &chunk.id, &chunk.src_text).await {
+                Ok(count) => {
+                    debug!("Tracked {} occurrences in chunk {}", count, chunk.id);
+                }
+                Err(e) => {
+                    warn!("Failed to track occurrences in chunk {}: {}", chunk.id, e);
+                    // Continue with other chunks
                 }
             }
         }
@@ -333,6 +362,8 @@ impl PaperProcessor {
                     .ok();
 
                 info!("Successfully retried chunk {}", chunk_id);
+                // Recalculate paper status after successful retry
+                let _ = self.recalc_paper_status(&chunk.paper_id).await;
                 Ok(())
             }
             Err(e) => {
@@ -345,6 +376,8 @@ impl PaperProcessor {
                     .log_translation(chunk_id, &chunk.src_text, None, Some(e.to_string()), 0)
                     .ok();
 
+                // Recalculate status as well (might become failed if all failed)
+                let _ = self.recalc_paper_status(&chunk.paper_id).await;
                 Err(e)
             }
         }
@@ -428,6 +461,128 @@ impl PaperProcessor {
             success_count, error_count
         );
 
+        Ok(())
+    }
+}
+
+impl PaperProcessor {
+    /// Render tagged JA output into span HTML and store occurrences & terms.
+    async fn render_html_and_occurrences(
+        &self,
+        paper_id: &str,
+        chunk_id: &str,
+        tagged_en: &str,
+        tagged_ja: &str,
+        meta_map: &std::collections::HashMap<String, TagInfo>,
+    ) -> Result<String> {
+        use crate::models::{Term, TermVariant};
+        use crate::models::Occurrence;
+
+        // Build HTML by scanning tagged_ja
+        let mut html = String::with_capacity(tagged_ja.len() + 256);
+        let mut plain_idx: i32 = 0; // count characters in plain JA
+        let mut i: usize = 0; // byte index at char boundary
+        let mut stack: Vec<(String, i32, usize)> = Vec::new(); // (id, start_plain, start_i)
+
+        // Helper: slugify EN lemma
+        fn slugify(s: &str) -> String {
+            let s = s.to_lowercase();
+            let mut out = String::with_capacity(s.len());
+            for ch in s.chars() {
+                if ch.is_ascii_alphanumeric() { out.push(ch); }
+                else if ch == ' ' || ch == '_' || ch == '-' { out.push('-'); }
+            }
+            while out.contains("--") { out = out.replace("--", "-"); }
+            out.trim_matches('-').to_string()
+        }
+
+        while i < tagged_ja.len() {
+            if tagged_ja[i..].starts_with("[[T:") {
+                if let Some(close) = tagged_ja[i+4..].find("]]") {
+                    let id = &tagged_ja[i+4 .. i+4+close];
+                    stack.push((id.to_string(), plain_idx, i));
+                    i += 4 + close + 2; // skip header ']]'
+                    continue;
+                }
+            }
+            if tagged_ja[i..].starts_with("[[/T]]") {
+                let (id, start_plain, start_i) = stack.pop().ok_or_else(|| anyhow::anyhow!("closing tag without open"))?;
+                let inner = &tagged_ja[start_i..i];
+                let surface_ja = strip_sentinels(inner);
+                let end_plain = plain_idx;
+
+                // Determine term
+                let lemma_en = meta_map.get(&id).and_then(|t| t.lemma_en.clone()).unwrap_or_else(|| {
+                    // fallback to EN surface from tagged_en
+                    // find corresponding EN surface by locating id segment
+                    if let Some(pos) = tagged_en.find(&format!("[[T:{}]]", id)) {
+                        // rough extraction
+                        let after = &tagged_en[pos+("[[T:".len()+id.len()+2)..];
+                        if let Some(end) = after.find("[[/T]]") { strip_sentinels(&after[..end]) } else { strip_sentinels(after) }
+                    } else { "unknown".to_string() }
+                });
+                let slug = slugify(&lemma_en);
+
+                // Upsert term
+                let term_id = match Term::find_by_slug(&self.pool, &slug).await {
+                    Ok(t) => t.id,
+                    Err(_) => {
+                        // First time: use surface_ja as lemma_ja
+                        let t = Term::create(&self.pool, slug.clone(), lemma_en.clone(), surface_ja.clone(), None, None, None, None).await?;
+                        t.id
+                    }
+                };
+
+                // Variants (best-effort)
+                let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), surface_ja.clone()).await;
+                if let Some(meta) = meta_map.get(&id) {
+                    let _ = TermVariant::create(&self.pool, term_id.clone(), "en".into(), meta.surface.clone()).await;
+                }
+
+                // Create occurrence
+                let occ = Occurrence::create_ext(
+                    &self.pool,
+                    &term_id,
+                    paper_id,
+                    chunk_id,
+                    start_plain,
+                    end_plain,
+                    Some(&surface_ja),
+                    "tagged-translation",
+                    None,
+                ).await?;
+
+                // Emit span
+                html.push_str(&format!("<span class=\"term\" data-term-id=\"{}\" data-occurrence-id=\"{}\">{}</span>", term_id, occ.id, surface_ja));
+
+                i += 6; // skip [[/T]]
+                continue;
+            }
+
+            // normal char (advance by char, not byte)
+            let ch = tagged_ja[i..].chars().next().unwrap();
+            html.push(ch);
+            i += ch.len_utf8();
+            plain_idx += 1;
+        }
+
+        Ok(html)
+    }
+
+    /// Recalculate paper status based on chunk counts and update immediately.
+    async fn recalc_paper_status(&self, paper_id: &str) -> Result<()> {
+        let total = crate::models::Chunk::count_by_paper_id(&self.pool, paper_id).await? as i64;
+        let translated = crate::models::Chunk::count_translated_by_paper_id(&self.pool, paper_id).await? as i64;
+        let failed = crate::models::Chunk::count_failed_by_paper_id(&self.pool, paper_id).await? as i64;
+
+        if total > 0 && translated == total {
+            crate::models::Paper::update_status(&self.pool, paper_id, crate::models::PaperStatus::Completed).await?;
+        } else if total > 0 && failed == total {
+            crate::models::Paper::update_status(&self.pool, paper_id, crate::models::PaperStatus::Failed).await?;
+        } else {
+            // Keep processing if mixed or pending
+            crate::models::Paper::update_status(&self.pool, paper_id, crate::models::PaperStatus::Processing).await?;
+        }
         Ok(())
     }
 }

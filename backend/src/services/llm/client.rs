@@ -49,15 +49,25 @@ impl LlmClient {
         let api_key = env::var("AI_API_KEY")
             .unwrap_or_else(|_| "test-api-key".to_string());
 
+        let timeout_secs: u64 = env::var("AI_REQUEST_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(600); // default 10 minutes
+
         let client = Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(timeout_secs))
             .build()?;
+
+        let max_conc: usize = env::var("AI_MAX_CONCURRENCY")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5); // default 5 per ops guidance
 
         Ok(Self {
             client,
             api_base,
             api_key,
-            semaphore: std::sync::Arc::new(Semaphore::new(10)), // FR-014: Max 10 concurrent requests
+            semaphore: std::sync::Arc::new(Semaphore::new(max_conc)),
         })
     }
 

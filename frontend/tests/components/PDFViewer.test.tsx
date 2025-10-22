@@ -1,7 +1,17 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import React from 'react'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+
+// Create a mock pdfjs object that we can spy on using vi.hoisted
+const { mockGlobalWorkerOptions, mockPdfjs } = vi.hoisted(() => {
+  const mockGlobalWorkerOptions = { workerSrc: '' }
+  const mockPdfjs = {
+    version: '3.11.174',
+    GlobalWorkerOptions: mockGlobalWorkerOptions
+  }
+  return { mockGlobalWorkerOptions, mockPdfjs }
+})
 
 // Mock react-pdf Document/Page to avoid loading real PDFs
 vi.mock('react-pdf', async () => {
@@ -13,13 +23,18 @@ vi.mock('react-pdf', async () => {
     return <div data-testid="doc">{children}</div>
   }
   const Page = ({ pageNumber }: any) => <div>Page {pageNumber}</div>
-  const pdfjs = { version: '4.0.0', GlobalWorkerOptions: { workerSrc: '' } }
-  return { Document, Page, pdfjs }
+  return { Document, Page, pdfjs: mockPdfjs }
 })
 
 import PDFViewer from '../../src/components/PDFViewer'
 
 describe('PDFViewer (mocked)', () => {
+  it('sets up PDF.js worker from local public directory on module import', () => {
+    // PDFViewer sets workerSrc at module import time (top-level code)
+    // This test verifies it's set to the local path, not CDN
+    expect(mockGlobalWorkerOptions.workerSrc).toBe('/pdf.worker.min.js')
+  })
+
   it('navigates pages and zoom', async () => {
     render(<PDFViewer fileUrl="/dummy.pdf" />)
     // Wait for load

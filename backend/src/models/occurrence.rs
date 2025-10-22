@@ -14,6 +14,10 @@ pub struct Occurrence {
     pub start_pos: i32,
     pub end_pos: i32,
     pub created_at: DateTime<Utc>,
+    // New fields (003 migration)
+    pub surface: Option<String>,
+    pub method: String,          // 'tagged-translation' by default
+    pub variant_id: Option<String>,
 }
 
 impl Occurrence {
@@ -43,6 +47,42 @@ impl Occurrence {
         .bind(start_pos)
         .bind(end_pos)
         .bind(now)
+        .fetch_one(pool)
+        .await
+    }
+
+    /// Create a new occurrence with extended fields (surface/method/variant_id)
+    pub async fn create_ext(
+        pool: &SqlitePool,
+        term_id: &str,
+        paper_id: &str,
+        chunk_id: &str,
+        start_pos: i32,
+        end_pos: i32,
+        surface: Option<&str>,
+        method: &str,
+        variant_id: Option<&str>,
+    ) -> Result<Self, sqlx::Error> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        sqlx::query_as::<_, Occurrence>(
+            r#"
+            INSERT INTO occurrences (id, term_id, paper_id, chunk_id, start_pos, end_pos, created_at, surface, method, variant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING *
+            "#,
+        )
+        .bind(&id)
+        .bind(term_id)
+        .bind(paper_id)
+        .bind(chunk_id)
+        .bind(start_pos)
+        .bind(end_pos)
+        .bind(now)
+        .bind(surface)
+        .bind(method)
+        .bind(variant_id)
         .fetch_one(pool)
         .await
     }

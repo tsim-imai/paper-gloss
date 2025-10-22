@@ -75,6 +75,51 @@ impl TranslationService {
 
         results
     }
+
+    /// Translate a TAGGED text chunk (with sentinel tags) to Japanese.
+    /// Tags must be preserved exactly; only the inner text is translated.
+    pub async fn translate_tagged_chunk(&self, tagged_source_text: &str, max_retries: usize) -> Result<TranslationResult> {
+        use crate::services::llm::Message;
+        let start = Instant::now();
+        let mut last_error = None;
+
+        for attempt in 0..=max_retries {
+            let system = Message {
+                role: "system".to_string(),
+                content: "You are a professional English-to-Japanese translator for ML papers. The input contains sentinel tags [[T:...]] and [[/T]]. You MUST preserve tags exactly (including order and pairings). Translate only the text inside tags and outside tags, but never modify the tags themselves.".to_string(),
+            };
+            let user = Message { role: "user".to_string(), content: tagged_source_text.to_string() };
+
+            match self.llm_client.chat_completion(vec![system.clone(), user.clone()], None, Some(6000)).await {
+                Ok(translated) => {
+                    // Do not apply preserve_tokens here; tags act as anchors
+                    return Ok(TranslationResult { translated_text: translated, duration: start.elapsed(), retry_count: attempt });
+                }
+                Err(e) => {
+                    warn!("Tagged translation attempt {} failed: {}", attempt + 1, e);
+                    last_error = Some(e);
+                    if attempt < max_retries {
+                        let backoff_ms = 1000 * (1 << attempt);
+                        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap())
+    }
+
+    /// Batch translate tagged chunks with concurrency control
+    pub async fn translate_tagged_chunks(&self, chunks: Vec<String>) -> Vec<Result<TranslationResult>> {
+        use futures::stream::{self, StreamExt};
+        let conc: usize = std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
+        let results: Vec<_> = stream::iter(chunks)
+            .map(|chunk| async move { self.translate_tagged_chunk(&chunk, 3).await })
+            .buffer_unordered(conc)
+            .collect()
+            .await;
+        results
+    }
 }
 
 impl Default for TranslationService {

@@ -1,5 +1,7 @@
 use crate::api::error::AppError;
-use crate::models::Paper;
+use crate::models::{Paper, PaperStatus};
+use futures::FutureExt;
+use std::panic::AssertUnwindSafe;
 use crate::services::PaperProcessor;
 use axum::{
     extract::{Path, State},
@@ -32,16 +34,30 @@ pub async fn process_paper(
     let pool_clone = pool.clone();
     let paper_id_clone = paper_id.clone();
     tokio::spawn(async move {
-        let processor = match PaperProcessor::new(pool_clone) {
+        let processor = match PaperProcessor::new(pool_clone.clone()) {
             Ok(p) => p,
             Err(e) => {
                 tracing::error!("Failed to create processor: {}", e);
+                // mark failed
+                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
                 return;
             }
         };
 
-        if let Err(e) = processor.process_paper(&paper_id_clone).await {
-            tracing::error!("Paper processing failed: {}", e);
+        let result = AssertUnwindSafe(async { processor.process_paper(&paper_id_clone).await })
+            .catch_unwind()
+            .await;
+
+        match result {
+            Ok(Ok(())) => { /* done */ }
+            Ok(Err(e)) => {
+                tracing::error!("Paper processing failed: {}", e);
+                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
+            }
+            Err(_) => {
+                tracing::error!("Paper processing panicked");
+                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
+            }
         }
     });
 

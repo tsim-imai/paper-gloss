@@ -12,7 +12,7 @@ impl OccurrenceTracker {
         Self { pool }
     }
 
-    /// Track all term occurrences in a chunk's translated text
+    /// Track all term occurrences in a chunk's source text (English)
     pub async fn track_occurrences(
         &self,
         paper_id: &str,
@@ -25,8 +25,8 @@ impl OccurrenceTracker {
         let all_variants = self.get_all_variants().await?;
 
         for (term_id, surface, lang) in all_variants {
-            // Only track in translated (Japanese) text for now
-            if lang == "ja" {
+            // Track English variants in source (English) text
+            if lang == "en" {
                 let occurrences = self.find_surface_occurrences(&surface, text);
 
                 for (start_pos, end_pos) in occurrences {
