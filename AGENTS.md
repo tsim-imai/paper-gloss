@@ -1,9 +1,10 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-The repository splits a Rust backend (`backend/`) and a Vite + React frontend (`frontend/`). Backend routes sit in `backend/src/api`, supporting services in `backend/src/services`, shared types in `backend/src/models`, migrations in `backend/migrations`, and test helpers in `backend/tests/common`. The frontend keeps UI and hooks in `frontend/src`, with feature-aligned tests in `frontend/tests/{components,pages,services}`; documentation and specs live in `docs/` and `specs/`, while `artifacts/` stores generated assets.
+The repository splits a Rust backend (`backend/`) and a Vite + React frontend (`frontend/`). Backend routes sit in `backend/src/api`, supporting services in `backend/src/services`, shared types in `backend/src/models`, migrations in `backend/migrations`, and test helpers in `backend/tests/common`. The frontend keeps UI and hooks in `frontend/src`, with feature-aligned tests in `frontend/tests/{components,pages,services,integration,performance}`; documentation and specs live in `docs/` and `specs/`, while `artifacts/` stores generated assets.
 
 ## Build, Test, and Development Commands
+- `cp backend/.env.example backend/.env` / `cp frontend/.env.example frontend/.env.local`: create env files and point `AI_API_*` plus `VITE_API_BASE_URL` at your local services.
 - `cd backend && cargo run`: launch the Axum API (uses `DATABASE_URL`).
 - `cd backend && cargo test`: run unit, integration, and contract suites.
 - `cd backend && cargo fmt && cargo clippy -- -D warnings`: format and lint the Rust codebase.

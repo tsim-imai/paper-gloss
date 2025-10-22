@@ -27,12 +27,10 @@ class ApiClient {
   }
 
   // Papers API
-  async importPaperFile(file: File, title?: string) {
+  async importPaperFile(file: File, title: string = '') {
     const formData = new FormData()
     formData.append('file', file)
-    if (title) {
-      formData.append('title', title)
-    }
+    formData.append('title', title || '')
     return this.client.post('/papers/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -67,6 +65,10 @@ class ApiClient {
 
   async getPaperStatus(paperId: string) {
     return this.client.get(`/papers/${paperId}/status`)
+  }
+
+  async deletePaper(paperId: string) {
+    return this.client.delete(`/papers/${paperId}`)
   }
 
   async retryChunk(chunkId: string) {

@@ -76,6 +76,11 @@
 - [X] T025 [P] [US1] Frontend component test for PDF upload UI in frontend/tests/components/PaperImport.test.tsx per spec.md:20
 - [X] T026 [P] [US1] Frontend component test for translation view in frontend/tests/components/TranslationView.test.tsx per spec.md:23-24
 
+// Added by QA pass (2025-10-21)
+- [X] T018A [P] [US1] Edge-case contract tests for POST /papers/import in backend/tests/contract/test_paper_import_edges.rs (zero-byte, invalid magic, missing fields, Location header)
+- [X] T021A [P] [US1] Contract test for translation chunk order (GET /papers/{id}/translation returns chunks sorted by index) in backend/tests/contract/test_translation_order.rs
+- [X] T031A [P] [US1] Contract test for GET /papers/{id}/status in backend/tests/contract/test_paper_status.rs (progress structure, 404 on unknown)
+
 ### Implementation for User Story 1
 
 **Models & Database** (run in parallel):
@@ -111,7 +116,7 @@
 
 **Validation & Error Handling**:
 
-- [ ] T046 [US1] Add PDF extraction error handling (detect unparseable pages, partial processing) in extraction service per spec.md:Edge Cases, FR-005, FR-007
+- [X] T046 [US1] Add PDF extraction error handling (detect unparseable pages, partial processing) in extraction service per spec.md:Edge Cases, FR-005, FR-007
 - [X] T047 [US1] Add LLM failure handling (exponential backoff, partial result preservation) in translation service per spec.md:Edge Cases, FR-013, FR-015
 - [X] T048 [US1] Add validation and error messages in PaperImport component per spec.md:20
 
@@ -189,6 +194,11 @@
 - [X] T078 [P] [US3] Integration test for glossary CRUD workflow in backend/tests/integration/test_glossary.rs per spec.md:55-62
 - [X] T079 [P] [US3] Frontend component test for glossary search in frontend/tests/components/GlossarySearch.test.tsx per spec.md:57
 - [X] T080 [P] [US3] Frontend component test for term merge UI in frontend/tests/components/TermMerge.test.tsx per spec.md:60
+
+// Added by QA pass (2025-10-21)
+- [X] T077A [P] [US3] Contract test for POST /terms/{id}/define 404 (unknown id) in backend/tests/contract/test_term_define_not_found.rs
+- [X] T072A [P] [US3] Contract tests for term list sorting & pagination in backend/tests/contract/test_term_list_sorting.rs (frequency, recent, limit cap)
+- [X] T076A [P] [US3] Contract test for GET /terms/duplicates in backend/tests/contract/test_term_duplicates.rs
 
 ### Implementation for User Story 3
 

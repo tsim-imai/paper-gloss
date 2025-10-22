@@ -76,6 +76,10 @@ A researcher wants to review all extracted terms in a dedicated glossary view, s
 
 - **What happens when a term appears hundreds of times in a long paper?** Tooltip performance must remain under 100ms. Occurrence tracking should be efficient enough to handle high-frequency terms without degradation.
 
+- **What happens when a user deletes a paper that is still being processed?** System should stop the background processing tasks, clean up any partial results (chunks, translations in progress), remove the paper from the database, delete the PDF file from storage, and remove associated occurrences. If terms become orphaned (no occurrences in any remaining papers), they should be automatically cleaned up or flagged for user review.
+
+- **What happens when deletion fails midway through?** (e.g., database deletion succeeds but file deletion fails) System should handle partial deletion gracefully, log the failure, and either retry or allow manual cleanup. The UI should show an appropriate error message.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -140,6 +144,12 @@ Clarification (API behavior for not-yet-translated papers):
 - **FR-034**: System MUST persist all user data (papers, translations, terms, definitions) in local storage that survives application restarts
 - **FR-035**: System MUST support glossary export to standard formats (JSON, CSV)
 - **FR-036**: System MUST use versioned, reversible database migrations to manage schema changes
+
+#### Paper Management
+
+- **FR-037**: System MUST allow users to delete imported papers along with all associated data (chunks, translations, occurrences, and stored PDF files)
+- **FR-038**: System MUST require explicit user confirmation before deleting a paper to prevent accidental data loss
+- **FR-039**: System MUST clean up orphaned terms (terms with no remaining occurrences across all papers) after paper deletion
 
 ### Key Entities *(include if feature involves data)*
 

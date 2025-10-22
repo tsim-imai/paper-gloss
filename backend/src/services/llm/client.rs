@@ -63,7 +63,7 @@ impl LlmClient {
 
     /// Get the model name being used
     pub fn model_name(&self) -> &str {
-        "gpt-4"
+        "codex/gpt-5:medium"
     }
 
     /// Send chat completion request to LLM API
@@ -76,7 +76,7 @@ impl LlmClient {
         // Acquire semaphore permit (limits concurrency)
         let _permit = self.semaphore.acquire().await?;
 
-        let model = model.unwrap_or_else(|| "gpt-4".to_string());
+        let model = model.unwrap_or_else(|| "codex/gpt-5:medium".to_string());
         let url = format!("{}/chat/completions", self.api_base);
 
         let request_body = ChatRequest {

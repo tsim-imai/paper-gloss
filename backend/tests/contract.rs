@@ -4,6 +4,8 @@ mod common;
 mod test_paper_import;
 #[path = "contract/test_paper_import_edges.rs"]
 mod test_paper_import_edges;
+#[path = "contract/test_pdf_error_handling.rs"]
+mod test_pdf_error_handling;
 
 #[path = "contract/test_paper_list.rs"]
 mod test_paper_list;
@@ -18,6 +20,9 @@ mod test_translation;
 mod test_paper_process;
 #[path = "contract/test_paper_status.rs"]
 mod test_paper_status;
+
+#[path = "contract/test_paper_delete.rs"]
+mod test_paper_delete;
 
 #[path = "contract/test_chunk_retry.rs"]
 mod test_chunk_retry;

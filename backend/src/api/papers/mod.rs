@@ -5,6 +5,7 @@ pub mod translation;
 pub mod process;
 pub mod status;
 pub mod file;
+pub mod delete;
 
 pub use import::import_paper;
 pub use list::list_papers;
@@ -13,3 +14,4 @@ pub use translation::get_translation;
 pub use process::process_paper;
 pub use status::get_paper_status;
 pub use file::get_paper_file;
+pub use delete::delete_paper;

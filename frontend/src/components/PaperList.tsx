@@ -33,7 +33,7 @@ export default function PaperList() {
     )
   }
 
-  const papers: Paper[] = data?.items || []
+  const papers: Paper[] = data?.papers || []
   const totalPages = data?.total_pages || 1
 
   const getStatusColor = (status: PaperStatus) => {

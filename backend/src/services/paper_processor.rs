@@ -6,7 +6,7 @@ use crate::services::translation::TranslationService;
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
 use std::path::Path;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Paper processing orchestrator (FR-031, FR-032, FR-033)
 /// Coordinates: extraction → chunking → translation → term extraction
@@ -37,12 +37,33 @@ impl PaperProcessor {
             .await
             .context("Failed to find paper")?;
 
-        // Step 2: Extract text from PDF
+        // Step 2: Extract text from PDF (FR-005, FR-007)
         let file_path = Path::new(&paper.file_path);
         let extraction_result = match PdfExtractor::extract_with_recovery(file_path) {
-            Ok(result) => result,
+            Ok(result) => {
+                // Log any warnings from extraction
+                for warning in &result.warnings {
+                    warn!("PDF extraction warning for {}: {}", paper_id, warning);
+                }
+
+                // Check if extraction is usable
+                if !PdfExtractor::is_extraction_usable(&result) {
+                    warn!("PDF extraction produced insufficient text for {}", paper_id);
+                    if result.text.is_empty() {
+                        Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await?;
+                        anyhow::bail!("No text could be extracted from PDF. The file may be corrupted, encrypted, or contain only scanned images.");
+                    }
+                }
+
+                // Log if partial extraction
+                if result.is_partial {
+                    warn!("PDF extraction is partial for {} - some content may be missing", paper_id);
+                }
+
+                result
+            }
             Err(e) => {
-                warn!("PDF extraction failed for {}: {}", paper_id, e);
+                error!("PDF extraction completely failed for {}: {}", paper_id, e);
                 Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await?;
                 return Err(e);
             }
@@ -50,14 +71,26 @@ impl PaperProcessor {
 
         if !extraction_result.failed_pages.is_empty() {
             warn!(
-                "PDF extraction had {} failed pages",
-                extraction_result.failed_pages.len()
+                "PDF extraction had {} failed pages for paper {}",
+                extraction_result.failed_pages.len(),
+                paper_id
             );
         }
 
-        // Step 3: Chunk text
+        // Step 3: Chunk text (even if partial)
         let chunker = TextChunker::default();
-        let chunks = chunker.chunk(&extraction_result.text);
+        let chunks = if extraction_result.text.is_empty() {
+            warn!("No text to chunk for paper {}", paper_id);
+            vec![]
+        } else {
+            chunker.chunk(&extraction_result.text)
+        };
+
+        if chunks.is_empty() {
+            warn!("No chunks created for paper {} - cannot proceed with translation", paper_id);
+            Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await?;
+            anyhow::bail!("No processable content found in PDF");
+        }
 
         info!("Created {} chunks for paper {}", chunks.len(), paper_id);
 

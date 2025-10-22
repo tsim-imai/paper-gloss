@@ -14,8 +14,8 @@ export default function PaperImport() {
   const queryClient = useQueryClient()
 
   const importFileMutation = useMutation({
-    mutationFn: (data: { file: File; title?: string }) =>
-      apiClient.importPaperFile(data.file, data.title),
+    mutationFn: (data: { file: File; title: string }) =>
+      apiClient.importPaperFile(data.file, data.title || ''),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       setFile(null)
@@ -64,7 +64,7 @@ export default function PaperImport() {
         setError('Please select a PDF file')
         return
       }
-      importFileMutation.mutate({ file, title: title || undefined })
+      importFileMutation.mutate({ file, title: title })
     } else {
       if (!url) {
         setError('Please enter an arXiv URL')
@@ -125,7 +125,7 @@ export default function PaperImport() {
 
       <form onSubmit={handleSubmit}>
         {mode === 'file' ? (
-          <>
+          <div key="file-mode">
             <div style={{ marginBottom: '1rem' }}>
               <label htmlFor="file-input" style={{ display: 'block', marginBottom: '0.5rem' }}>
                 PDF File *
@@ -154,9 +154,9 @@ export default function PaperImport() {
                 style={{ width: '100%' }}
               />
             </div>
-          </>
+          </div>
         ) : (
-          <>
+          <div key="url-mode">
             <div style={{ marginBottom: '1rem' }}>
               <label htmlFor="url-input" style={{ display: 'block', marginBottom: '0.5rem' }}>
                 arXiv URL *
@@ -176,11 +176,11 @@ export default function PaperImport() {
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="title-input-url" style={{ display: 'block', marginBottom: '0.5rem' }}>
+              <label htmlFor="title-input" style={{ display: 'block', marginBottom: '0.5rem' }}>
                 Title *
               </label>
               <input
-                id="title-input-url"
+                id="title-input"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -189,7 +189,7 @@ export default function PaperImport() {
                 style={{ width: '100%' }}
               />
             </div>
-          </>
+          </div>
         )}
 
         {error && (

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::fs;
 use std::path::PathBuf;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
@@ -92,6 +92,13 @@ async fn handle_file_upload(
     file_data: Vec<u8>,
     title: Option<String>,
 ) -> Result<(StatusCode, HeaderMap, Json<ImportResponse>), AppError> {
+    // Check for empty file (FR-005)
+    if file_data.is_empty() {
+        return Err(AppError::UnprocessableEntity(
+            "File is empty (0 bytes)".to_string(),
+        ));
+    }
+
     // Validate PDF size
     if file_data.len() > 100 * 1024 * 1024 {
         return Err(AppError::UnprocessableEntity(
@@ -99,8 +106,8 @@ async fn handle_file_upload(
         ));
     }
 
-    // Validate PDF format (check PDF magic bytes)
-    if file_data.len() < 4 || &file_data[0..4] != b"%PDF" {
+    // Validate PDF format (check PDF magic bytes - FR-005)
+    if file_data.len() < 5 || &file_data[0..5] != b"%PDF-" {
         return Err(AppError::UnprocessableEntity(
             "Invalid file format. Only PDF files are accepted.".to_string(),
         ));
@@ -122,6 +129,16 @@ async fn handle_file_upload(
         .map_err(|e| AppError::InternalServerError(format!("Failed to write PDF: {}", e)))?;
 
     info!("Saved PDF to {}", file_path);
+
+    // Pre-validate PDF extraction capability (FR-005, FR-007)
+    use crate::services::pdf::PdfExtractor;
+    use std::path::Path;
+    if let Ok(valid) = PdfExtractor::validate_pdf(Path::new(&file_path)) {
+        if !valid {
+            warn!("PDF validation indicates potential extraction issues for {}", file_path);
+            // Continue anyway - let the processor handle partial extraction
+        }
+    }
 
     // Create paper record
     let paper = Paper::create(pool, title.clone(), None, file_path.clone())
