@@ -108,19 +108,31 @@ impl PaperProcessor {
             .context("Failed to create chunk")?;
         }
 
-        // Step 5: Translate chunks
+        // Step 5: Translate chunks in parallel (FR-014)
         let llm_logger = LlmLogger::new(paper_id)?;
 
-        for chunk in &chunks {
-            match self.translation_service.translate_chunk(&chunk.text, 3).await {
-                Ok(result) => {
-                    // Find chunk by index
-                    let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
-                    if let Some(db_chunk) = db_chunks.get(chunk.index) {
+        // Collect chunk texts for parallel processing
+        let chunk_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+
+        info!("Translating {} chunks in parallel for paper {}", chunk_texts.len(), paper_id);
+
+        // Translate all chunks in parallel (up to 10 concurrent per FR-014)
+        let results = self.translation_service.translate_chunks(chunk_texts).await;
+
+        // Process translation results
+        let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+
+        for (index, result) in results.into_iter().enumerate() {
+            let chunk = &chunks[index];
+            let db_chunk = db_chunks.get(index);
+
+            if let Some(db_chunk) = db_chunk {
+                match result {
+                    Ok(translation_result) => {
                         Chunk::update_translation(
                             &self.pool,
                             &db_chunk.id,
-                            result.translated_text.clone(),
+                            translation_result.translated_text.clone(),
                         )
                         .await?;
 
@@ -129,37 +141,33 @@ impl PaperProcessor {
                             .log_translation(
                                 &db_chunk.id,
                                 &chunk.text,
-                                Some(&result.translated_text),
+                                Some(&translation_result.translated_text),
                                 None,
-                                result.duration.as_millis(),
+                                translation_result.duration.as_millis(),
                             )
                             .ok();
 
                         debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
                     }
-                }
-                Err(e) => {
-                    warn!("Translation failed for chunk {}: {}", chunk.index, e);
+                    Err(e) => {
+                        warn!("Translation failed for chunk {}: {}", chunk.index, e);
 
-                    // Update chunk status to failed
-                    let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
-                    if let Some(db_chunk) = db_chunks.get(chunk.index) {
+                        // Update chunk status to failed
                         Chunk::update_status(&self.pool, &db_chunk.id, "failed", Some(e.to_string())).await.ok();
+
+                        // Log failed translation
+                        llm_logger
+                            .log_translation(
+                                &db_chunk.id,
+                                &chunk.text,
+                                None,
+                                Some(e.to_string()),
+                                0,
+                            )
+                            .ok();
+
+                        // FR-033: Preserve partial results - continue processing other chunks
                     }
-
-                    // Log failed translation
-                    llm_logger
-                        .log_translation(
-                            &format!("chunk_{}", chunk.index),
-                            &chunk.text,
-                            None,
-                            Some(e.to_string()),
-                            0,
-                        )
-                        .ok();
-
-                    // FR-033: Preserve partial results - continue processing other chunks
-                    continue;
                 }
             }
         }
@@ -211,30 +219,64 @@ impl PaperProcessor {
         Ok(())
     }
 
-    /// Extract terms from paper source text
+    /// Extract terms from paper source text in parallel (FR-014)
     async fn extract_terms(&self, paper_id: &str) -> Result<()> {
+        use futures::stream::{self, StreamExt};
+
         let term_extractor = TermExtractor::new(self.llm_client.clone(), self.pool.clone());
 
         let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
 
-        // Extract terms from each chunk's source text
-        for chunk in chunks {
-            // Only extract from chunks with translations
-            if chunk.trans_html.is_some() {
-                match term_extractor.extract_terms(&chunk.src_text).await {
-                    Ok(extracted_terms) => {
-                        term_extractor
-                            .store_terms(paper_id, &chunk.id, extracted_terms)
-                            .await?;
-                        debug!("Extracted terms from chunk {}", chunk.id);
+        // Filter chunks with translations
+        let chunks_to_process: Vec<_> = chunks
+            .into_iter()
+            .filter(|chunk| chunk.trans_html.is_some())
+            .collect();
+
+        info!("Extracting terms from {} chunks in parallel", chunks_to_process.len());
+
+        // Extract terms from each chunk in parallel (up to 10 concurrent per FR-014)
+        let results: Vec<_> = stream::iter(chunks_to_process)
+            .map(|chunk| {
+                let extractor = term_extractor.clone();
+                let paper_id = paper_id.to_string();
+                async move {
+                    let chunk_id = chunk.id.clone();
+                    match extractor.extract_terms(&chunk.src_text).await {
+                        Ok(extracted_terms) => {
+                            extractor
+                                .store_terms(&paper_id, &chunk_id, extracted_terms)
+                                .await
+                                .map(|_| chunk_id.clone())
+                        }
+                        Err(e) => Err(e),
                     }
-                    Err(e) => {
-                        warn!("Failed to extract terms from chunk {}: {}", chunk.id, e);
-                        // Continue with other chunks
-                    }
+                }
+            })
+            .buffer_unordered(10) // Max 10 concurrent (FR-014)
+            .collect()
+            .await;
+
+        // Log results
+        let mut success_count = 0;
+        let mut error_count = 0;
+        for result in results {
+            match result {
+                Ok(chunk_id) => {
+                    debug!("Extracted terms from chunk {}", chunk_id);
+                    success_count += 1;
+                }
+                Err(e) => {
+                    warn!("Failed to extract terms: {}", e);
+                    error_count += 1;
                 }
             }
         }
+
+        info!(
+            "Term extraction completed: {} succeeded, {} failed",
+            success_count, error_count
+        );
 
         Ok(())
     }
@@ -308,8 +350,10 @@ impl PaperProcessor {
         }
     }
 
-    /// Generate definitions for terms without definitions
+    /// Generate definitions for terms without definitions in parallel (FR-014)
     async fn generate_definitions(&self, paper_id: &str) -> Result<()> {
+        use futures::stream::{self, StreamExt};
+
         let def_generator = DefinitionGenerator::new(self.llm_client.clone(), self.pool.clone());
 
         // Get all terms from occurrences in this paper
@@ -323,34 +367,17 @@ impl PaperProcessor {
         .fetch_all(&self.pool)
         .await?;
 
+        // Filter terms that don't have definitions yet
+        let mut terms_to_generate = Vec::new();
         for term_id in term_ids {
-            // Check if definition already exists
             match crate::models::Definition::find_by_term_id(&self.pool, &term_id).await {
                 Ok(Some(_)) => {
-                    // Definition already exists, skip
                     debug!("Definition already exists for term {}", term_id);
-                    continue;
                 }
                 Ok(None) => {
-                    // No definition, generate one
-                    match Term::find_by_id(&self.pool, &term_id).await {
-                        Ok(term) => {
-                            match def_generator
-                                .generate_and_store(&term.id, &term.lemma_en, &term.lemma_ja, None)
-                                .await
-                            {
-                                Ok(_) => {
-                                    info!("Generated definition for term {}", term.lemma_en);
-                                }
-                                Err(e) => {
-                                    warn!("Failed to generate definition for {}: {}", term.lemma_en, e);
-                                    // Continue with other terms
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to find term {}: {}", term_id, e);
-                        }
+                    // Need to generate definition
+                    if let Ok(term) = Term::find_by_id(&self.pool, &term_id).await {
+                        terms_to_generate.push(term);
                     }
                 }
                 Err(e) => {
@@ -358,6 +385,48 @@ impl PaperProcessor {
                 }
             }
         }
+
+        info!("Generating definitions for {} terms in parallel", terms_to_generate.len());
+
+        // Generate definitions in parallel (up to 10 concurrent per FR-014)
+        let results: Vec<_> = stream::iter(terms_to_generate)
+            .map(|term| {
+                let generator = def_generator.clone();
+                async move {
+                    let term_name = term.lemma_en.clone();
+                    match generator
+                        .generate_and_store(&term.id, &term.lemma_en, &term.lemma_ja, None)
+                        .await
+                    {
+                        Ok(_) => Ok(term_name),
+                        Err(e) => Err((term_name, e)),
+                    }
+                }
+            })
+            .buffer_unordered(10) // Max 10 concurrent (FR-014)
+            .collect()
+            .await;
+
+        // Log results
+        let mut success_count = 0;
+        let mut error_count = 0;
+        for result in results {
+            match result {
+                Ok(term_name) => {
+                    info!("Generated definition for term {}", term_name);
+                    success_count += 1;
+                }
+                Err((term_name, e)) => {
+                    warn!("Failed to generate definition for {}: {}", term_name, e);
+                    error_count += 1;
+                }
+            }
+        }
+
+        info!(
+            "Definition generation completed: {} succeeded, {} failed",
+            success_count, error_count
+        );
 
         Ok(())
     }

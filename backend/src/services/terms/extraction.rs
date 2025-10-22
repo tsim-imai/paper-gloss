@@ -15,6 +15,7 @@ pub struct ExtractedTerm {
 }
 
 /// Term extraction service using LLM (spec.md:FR-017)
+#[derive(Clone)]
 pub struct TermExtractor {
     llm_client: LlmClient,
     pool: SqlitePool,

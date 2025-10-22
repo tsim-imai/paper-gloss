@@ -4,6 +4,7 @@ use anyhow::{Result, Context};
 use sqlx::SqlitePool;
 
 /// Definition generation service using LLM (spec.md:FR-021)
+#[derive(Clone)]
 pub struct DefinitionGenerator {
     llm_client: LlmClient,
     pool: SqlitePool,

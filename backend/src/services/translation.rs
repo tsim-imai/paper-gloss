@@ -245,4 +245,102 @@ mod tests {
         assert!(out.contains("Eq. (1)"), "reference label must be preserved: Eq. (1)");
         assert!(out.contains("[Fig. 2]"), "reference label must be preserved: [Fig. 2]");
     }
+
+    /// FR-014: Test parallel translation with max 10 concurrent requests
+    #[tokio::test]
+    #[serial]
+    async fn fr014_translate_chunks_processes_in_parallel() {
+        use std::time::Instant;
+
+        let server = MockServer::start_async().await;
+        server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(200)
+                    .delay(std::time::Duration::from_millis(100)) // Each takes 100ms
+                    .json_body(serde_json::json!({
+                        "id": "chatcmpl-parallel",
+                        "object": "chat.completion",
+                        "created": 0,
+                        "model": "gpt-4",
+                        "choices": [{
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "翻訳されたテキスト"},
+                            "finish_reason": "stop"
+                        }]
+                    }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+
+        let service = TranslationService::new().unwrap();
+
+        // Create 20 chunks to translate
+        let chunks: Vec<String> = (0..20).map(|i| format!("Chunk {}", i)).collect();
+
+        let start = Instant::now();
+        let results = service.translate_chunks(chunks).await;
+        let elapsed = start.elapsed();
+
+        // All chunks should be successfully translated
+        assert_eq!(results.len(), 20);
+        let success_count = results.iter().filter(|r| r.is_ok()).count();
+        assert_eq!(success_count, 20, "All chunks should be translated successfully");
+
+        // With 20 chunks at 100ms each:
+        // - Sequential: 20 * 100ms = 2000ms
+        // - Parallel (10 concurrent): ceil(20/10) * 100ms = 200ms
+        // We expect it to complete in roughly 200-400ms (with some overhead)
+        assert!(
+            elapsed.as_millis() < 800,
+            "Parallel processing should complete much faster than sequential. Took {:?}",
+            elapsed
+        );
+
+        // Should take at least 200ms (2 waves of 10)
+        assert!(
+            elapsed.as_millis() >= 150,
+            "Should take time for at least 2 waves. Took {:?}",
+            elapsed
+        );
+    }
+
+    /// FR-014: Test that translate_chunks handles errors gracefully
+    #[tokio::test]
+    #[serial]
+    async fn fr014_translate_chunks_handles_partial_failures() {
+        let server = MockServer::start_async().await;
+
+        // Mock that returns 500 error for all requests
+        server
+            .mock_async(|when, then| {
+                when.method(POST).path("/v1/chat/completions");
+                then.status(500).json_body(serde_json::json!({
+                    "error": {"message": "Internal server error", "type": "server_error"}
+                }));
+            })
+            .await;
+
+        std::env::set_var("AI_API_BASE", format!("{}/v1", server.base_url()));
+        std::env::set_var("AI_API_KEY", "sk-test");
+
+        let service = TranslationService::new().unwrap();
+
+        let chunks: Vec<String> = (0..5).map(|i| format!("Chunk {}", i)).collect();
+
+        let results = service.translate_chunks(chunks).await;
+
+        assert_eq!(results.len(), 5, "Should process all chunks even with failures");
+
+        // All should fail in this test
+        let error_count = results.iter().filter(|r| r.is_err()).count();
+
+        // FR-033: Even with failures, we still return results for all chunks
+        // (they're just error results, but partial results are preserved)
+        assert!(error_count >= 1, "Should have at least one error with 500 responses");
+
+        println!("Errors: {}", error_count);
+    }
 }

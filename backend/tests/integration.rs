@@ -14,3 +14,6 @@ mod test_term_define_llm_proxy;
 
 #[path = "integration/test_persistence.rs"]
 mod test_persistence;
+
+#[path = "integration/test_parallel_processing.rs"]
+mod test_parallel_processing;
