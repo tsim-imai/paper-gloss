@@ -112,26 +112,46 @@ export interface PaginatedResponse<T> {
   total_pages: number
 }
 
+// Pipeline status types (JP-first architecture)
+export type PipelineStatus = 'idle' | 'processing' | 'completed' | 'failed'
+export type PipelineResultState = 'completed_nonempty' | 'completed_empty' | 'failed'
+
 export interface TranslationProgress {
   total_chunks: number
   completed_chunks: number
   failed_chunks: number
+  status: PipelineStatus
 }
 
-export interface DefinitionProgress {
+export interface TermsJpProgress {
   total_terms: number
-  completed_definitions: number
+  last_run_at?: string
+  status: PipelineStatus
 }
 
-export interface ProcessingProgress {
-  extraction: string
+export interface ScanJpProgress {
+  total_occurrences: number
+  last_run_at?: string
+  status: PipelineStatus
+}
+
+export interface DefinitionsProgress {
+  generated: number
+  failed: number
+  last_run_at?: string
+  status: PipelineStatus
+  result_state?: PipelineResultState
+}
+
+export interface PipelineProgress {
   translation: TranslationProgress
-  term_extraction: string
-  definitions: DefinitionProgress
+  terms_jp: TermsJpProgress
+  scan_jp: ScanJpProgress
+  definitions: DefinitionsProgress
 }
 
 export interface ProcessingStatusResponse {
   paper_id: string
   status: PaperStatus
-  progress: ProcessingProgress
+  progress: PipelineProgress
 }

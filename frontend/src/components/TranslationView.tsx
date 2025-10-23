@@ -77,12 +77,12 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
   const activeTermId = hoveredTermId || pinnedTermId
 
   if (isLoading) {
-    return <div style={{ textAlign: 'center', padding: '2rem' }}>Loading translation...</div>
+    return <div style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Loading translation...</div>
   }
 
   if (error) {
     return (
-      <div style={{ color: 'red', padding: '1rem' }}>
+      <div style={{ color: '#f44336', padding: '1rem' }}>
         Error loading translation: {(error as any).message}
       </div>
     )
@@ -92,14 +92,17 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
 
   if (chunks.length === 0) {
     return (
-      <div style={{
-        padding: '2rem',
-        textAlign: 'center',
-        border: '1px dashed #ccc',
-        borderRadius: '8px',
-        color: '#666'
-      }}>
-        No translations available yet. Start processing to generate translations.
+      <div
+        style={{
+          padding: '2rem',
+          textAlign: 'center',
+          border: '1px dashed #444',
+          borderRadius: '8px',
+          color: '#999',
+          backgroundColor: '#2a2a2a',
+        }}
+      >
+        No translations available yet. Start translation pipeline to generate translations.
       </div>
     )
   }
@@ -107,56 +110,61 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
   return (
     <div>
       {/* View controls */}
-      <div style={{
-        marginBottom: '1rem',
-        padding: '1rem',
-        backgroundColor: '#f9f9f9',
-        borderRadius: '8px',
-        display: 'flex',
-        gap: '1rem',
-        alignItems: 'center'
-      }}>
-        <span style={{ fontWeight: 'bold' }}>Display:</span>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+      <div
+        style={{
+          marginBottom: '1rem',
+          padding: '0.75rem',
+          backgroundColor: '#2a2a2a',
+          border: '1px solid #444',
+          borderRadius: '8px',
+          display: 'flex',
+          gap: '1rem',
+          alignItems: 'center',
+        }}
+      >
+        <span style={{ fontWeight: 'bold', fontSize: '0.875rem', color: '#999' }}>Display:</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#ccc' }}>
           <input
             type="checkbox"
             checked={showOriginal}
             onChange={(e) => setShowOriginal(e.target.checked)}
           />
-          Original English
+          <span style={{ fontSize: '0.875rem' }}>Original English</span>
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#ccc' }}>
           <input
             type="checkbox"
             checked={showTranslation}
             onChange={(e) => setShowTranslation(e.target.checked)}
           />
-          Japanese Translation
+          <span style={{ fontSize: '0.875rem' }}>Japanese Translation</span>
         </label>
       </div>
 
       {/* Chunks list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {chunks.map((chunk) => (
           <div
             key={chunk.id}
             style={{
-              border: '1px solid #ccc',
+              border: '1px solid #444',
               borderRadius: '8px',
               padding: '1rem',
-              backgroundColor: chunk.status === 'failed' ? '#ffebee' : 'white',
+              backgroundColor: chunk.status === 'failed' ? '#3a1a1a' : '#2a2a2a',
             }}
           >
             {/* Chunk header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1rem',
-              paddingBottom: '0.5rem',
-              borderBottom: '1px solid #e0e0e0'
-            }}>
-              <div style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.75rem',
+                paddingBottom: '0.5rem',
+                borderBottom: '1px solid #444',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#999' }}>
                 Chunk #{chunk.chunk_index + 1}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -187,21 +195,25 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
 
             {/* Original text */}
             {showOriginal && (
-              <div style={{ marginBottom: showTranslation ? '1rem' : 0 }}>
-                <div style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 'bold',
-                  color: '#666',
-                  marginBottom: '0.5rem',
-                  textTransform: 'uppercase'
-                }}>
+              <div style={{ marginBottom: showTranslation ? '0.75rem' : 0 }}>
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    color: '#999',
+                    marginBottom: '0.5rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
                   Original
                 </div>
-                <div style={{
-                  lineHeight: '1.6',
-                  whiteSpace: 'pre-wrap',
-                  color: '#333'
-                }}>
+                <div
+                  style={{
+                    lineHeight: '1.6',
+                    whiteSpace: 'pre-wrap',
+                    color: '#ccc',
+                  }}
+                >
                   {chunk.original_text}
                 </div>
               </div>
@@ -210,24 +222,28 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
             {/* Translation */}
             {showTranslation && (
               <div>
-                <div style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 'bold',
-                  color: '#666',
-                  marginBottom: '0.5rem',
-                  textTransform: 'uppercase'
-                }}>
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    color: '#999',
+                    marginBottom: '0.5rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
                   Translation
                 </div>
                 {chunk.translated_text ? (
-                  <TermHighlight
-                    text={chunk.translated_text}
-                    chunkId={chunk.id}
-                    occurrences={occurrences}
-                    highlightedTermId={activeTermId || undefined}
-                    onTermHover={handleTermHover}
-                    onTermClick={handleTermClick}
-                  />
+                  <div style={{ color: '#e0e0e0', lineHeight: '1.6' }}>
+                    <TermHighlight
+                      text={chunk.translated_text}
+                      chunkId={chunk.id}
+                      occurrences={occurrences}
+                      highlightedTermId={activeTermId || undefined}
+                      onTermHover={handleTermHover}
+                      onTermClick={handleTermClick}
+                    />
+                  </div>
                 ) : (
                   <div style={{ fontStyle: 'italic', color: '#999' }}>
                     {chunk.status === 'pending' ? 'Translation pending...' : 'Translation failed'}
@@ -238,15 +254,17 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
 
             {/* Error message for failed chunks */}
             {chunk.status === 'failed' && chunk.error_message && (
-              <div style={{
-                marginTop: '1rem',
-                padding: '0.75rem',
-                backgroundColor: '#fff',
-                border: '1px solid #f44336',
-                borderRadius: '4px',
-                fontSize: '0.75rem',
-                color: '#f44336'
-              }}>
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.75rem',
+                  backgroundColor: '#3a1a1a',
+                  border: '1px solid #f44336',
+                  borderRadius: '4px',
+                  fontSize: '0.75rem',
+                  color: '#f44336',
+                }}
+              >
                 <strong>Error:</strong> {chunk.error_message}
               </div>
             )}

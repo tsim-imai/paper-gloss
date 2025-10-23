@@ -59,8 +59,26 @@ class ApiClient {
     return this.client.get(`/papers/${paperId}/translation`)
   }
 
+  // Legacy endpoint (deprecated - use individual pipeline endpoints instead)
   async processPaper(paperId: string) {
     return this.client.post(`/papers/${paperId}/process`)
+  }
+
+  // JP-first pipeline endpoints
+  async translatePaper(paperId: string) {
+    return this.client.post(`/papers/${paperId}/translate`)
+  }
+
+  async extractTermsJp(paperId: string) {
+    return this.client.post(`/papers/${paperId}/extract-terms-jp`)
+  }
+
+  async scanJp(paperId: string) {
+    return this.client.post(`/papers/${paperId}/scan-jp`)
+  }
+
+  async generateDefinitions(paperId: string) {
+    return this.client.post(`/papers/${paperId}/generate-definitions`)
   }
 
   async getPaperStatus(paperId: string) {

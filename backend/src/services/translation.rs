@@ -5,6 +5,7 @@ use tracing::{debug, warn};
 use regex::Regex;
 
 /// Translation service using LLM (FR-011, FR-012, FR-013, FR-014, FR-015)
+#[derive(Clone)]
 pub struct TranslationService {
     llm_client: LlmClient,
 }
@@ -62,12 +63,11 @@ impl TranslationService {
     pub async fn translate_chunks(&self, chunks: Vec<String>) -> Vec<Result<TranslationResult>> {
         use futures::stream::{self, StreamExt};
 
-        // Process chunks in parallel (LLM client already handles concurrency limit)
+        // Process chunks in parallel; concurrency from env (default 5)
+        let conc: usize = std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
         let results: Vec<_> = stream::iter(chunks)
-            .map(|chunk| async move {
-                self.translate_chunk(&chunk, 3).await // 3 retries max
-            })
-            .buffer_unordered(10) // Max 10 concurrent (FR-014)
+            .map(|chunk| async move { self.translate_chunk(&chunk, 3).await })
+            .buffer_unordered(conc)
             .collect()
             .await;
 

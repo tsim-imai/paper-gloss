@@ -40,21 +40,28 @@ impl PaperProcessor {
     }
 
     /// Acquire pipeline lock by inserting a row (paper-scoped, single lock)
-    async fn acquire_pipeline_lock(&self, paper_id: &str) -> Result<PaperStatus> {
+    /// If `set_processing` is true, update paper.status to Processing (used only by Pipeline A: translate)
+    async fn acquire_pipeline_lock(&self, paper_id: &str, pipeline: &str, set_processing: bool) -> Result<PaperStatus> {
         use chrono::Utc;
         let paper = Paper::find_by_id(&self.pool, paper_id).await?;
         sqlx::query(
-            r#"INSERT INTO pipeline_locks (paper_id, pipeline, locked_at) VALUES (?, 'generic', ?)"#,
+            r#"INSERT INTO pipeline_locks (paper_id, pipeline, locked_at) VALUES (?, ?, ?)"#,
         )
         .bind(paper_id)
+        .bind(pipeline)
         .bind(Utc::now())
         .execute(&self.pool)
         .await?;
+
+        if set_processing {
+            // Only Pipeline A should move paper into processing
+            Paper::update_status(&self.pool, paper_id, PaperStatus::Processing).await?;
+        }
         Ok(paper.status.clone())
     }
 
-    /// Release pipeline lock by deleting the row (no status mutation)
-    async fn release_pipeline_lock(&self, paper_id: &str, _previous_status: PaperStatus) -> Result<()> {
+    /// Release pipeline lock by deleting the row (no status mutation here)
+    async fn release_pipeline_lock(&self, paper_id: &str, _pipeline: &str, _previous_status: PaperStatus) -> Result<()> {
         sqlx::query(
             r#"DELETE FROM pipeline_locks WHERE paper_id = ?"#,
         )
@@ -391,12 +398,12 @@ impl PaperProcessor {
 
         // Check lock
         self.check_pipeline_lock(paper_id).await?;
-        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id, "translate", true).await?;
 
         let result = self.translate_paper_internal(paper_id).await;
 
         // Release lock regardless of result
-        let _ = self.release_pipeline_lock(paper_id, prev_status).await;
+        let _ = self.release_pipeline_lock(paper_id, "translate", prev_status).await;
 
         match &result {
             Ok(_) => {
@@ -415,6 +422,8 @@ impl PaperProcessor {
     }
 
     async fn translate_paper_internal(&self, paper_id: &str) -> Result<()> {
+        use futures::stream::{self, StreamExt};
+
         let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
 
         if chunks.is_empty() {
@@ -424,12 +433,20 @@ impl PaperProcessor {
         let llm_logger = LlmLogger::new(paper_id)?;
         info!("Translating {} chunks in parallel for paper {}", chunks.len(), paper_id);
 
-        let source_texts: Vec<String> = chunks.iter().map(|c| c.src_text.clone()).collect();
-        let results = self.translation_service.translate_chunks(source_texts).await;
+        let conc: usize = std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
 
-        for (index, result) in results.into_iter().enumerate() {
-            let chunk = &chunks[index];
+        let stream = stream::iter(chunks.clone())
+            .map(|chunk| {
+                let svc = self.translation_service.clone();
+                async move {
+                    let res = svc.translate_chunk(&chunk.src_text, 3).await;
+                    (chunk, res)
+                }
+            })
+            .buffer_unordered(conc);
 
+        tokio::pin!(stream);
+        while let Some((chunk, result)) = stream.next().await {
             match result {
                 Ok(translation_result) => {
                     Chunk::update_translation(&self.pool, &chunk.id, translation_result.translated_text.clone()).await?;
@@ -452,17 +469,20 @@ impl PaperProcessor {
 
                     Chunk::update_status(&self.pool, &chunk.id, "failed", Some(e.to_string())).await.ok();
 
-                        llm_logger
-                            .log_translation(
-                                &chunk.id,
-                                &chunk.src_text,
-                                None,
-                                Some(e.to_string()),
-                                0,
-                            )
-                            .ok();
+                    llm_logger
+                        .log_translation(
+                            &chunk.id,
+                            &chunk.src_text,
+                            None,
+                            Some(e.to_string()),
+                            0,
+                        )
+                        .ok();
                 }
             }
+
+            // Update status incrementally so UI can reflect partial progress
+            let _ = self.recalc_paper_status(paper_id).await;
         }
 
         let translated_count = Chunk::count_translated_by_paper_id(&self.pool, paper_id).await?;
@@ -471,7 +491,8 @@ impl PaperProcessor {
             anyhow::bail!("No chunks were successfully translated");
         }
 
-        info!("Pipeline A completed: {}/{} chunks translated", translated_count, chunks.len());
+        let total_count = Chunk::count_by_paper_id(&self.pool, paper_id).await?;
+        info!("Pipeline A completed: {}/{} chunks translated", translated_count, total_count);
         Ok(())
     }
 
@@ -481,7 +502,7 @@ impl PaperProcessor {
 
         // Check lock
         self.check_pipeline_lock(paper_id).await?;
-        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id, "extract-terms-jp", false).await?;
 
         let result = self.extract_jp_terms_and_register(paper_id).await;
 
@@ -491,7 +512,7 @@ impl PaperProcessor {
         }
 
         // Release lock
-        self.release_pipeline_lock(paper_id, prev_status).await.ok();
+        self.release_pipeline_lock(paper_id, "extract-terms-jp", prev_status).await.ok();
 
         result
     }
@@ -502,7 +523,7 @@ impl PaperProcessor {
 
         // Check lock
         self.check_pipeline_lock(paper_id).await?;
-        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id, "scan-jp", false).await?;
 
         let result = self.scan_jp_occurrences(paper_id).await;
 
@@ -512,7 +533,7 @@ impl PaperProcessor {
         }
 
         // Release lock
-        self.release_pipeline_lock(paper_id, prev_status).await.ok();
+        self.release_pipeline_lock(paper_id, "scan-jp", prev_status).await.ok();
 
         result
     }
@@ -523,7 +544,7 @@ impl PaperProcessor {
 
         // Check lock
         self.check_pipeline_lock(paper_id).await?;
-        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id, "generate-definitions", false).await?;
 
         let result = self.generate_definitions(paper_id).await;
 
@@ -546,7 +567,7 @@ impl PaperProcessor {
         }
 
         // Release lock
-        self.release_pipeline_lock(paper_id, prev_status).await.ok();
+        self.release_pipeline_lock(paper_id, "generate-definitions", prev_status).await.ok();
 
         result.map(|_| ())
     }
