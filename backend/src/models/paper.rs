@@ -13,9 +13,15 @@ pub struct Paper {
     pub status: PaperStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Pipeline execution tracking (migration 004)
+    pub translation_last_run_at: Option<DateTime<Utc>>,
+    pub terms_jp_last_run_at: Option<DateTime<Utc>>,
+    pub scan_jp_last_run_at: Option<DateTime<Utc>>,
+    pub definitions_last_run_at: Option<DateTime<Utc>>,
+    pub definitions_result_state: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "TEXT", rename_all = "lowercase")]
 pub enum PaperStatus {
     #[serde(rename = "pending")]
@@ -167,6 +173,79 @@ impl Paper {
             DELETE FROM papers WHERE id = ?
             "#,
         )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update translation pipeline timestamp
+    pub async fn update_translation_run_at(pool: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE papers SET translation_last_run_at = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(Utc::now())
+        .bind(Utc::now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update terms_jp pipeline timestamp
+    pub async fn update_terms_jp_run_at(pool: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE papers SET terms_jp_last_run_at = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(Utc::now())
+        .bind(Utc::now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update scan_jp pipeline timestamp
+    pub async fn update_scan_jp_run_at(pool: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE papers SET scan_jp_last_run_at = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(Utc::now())
+        .bind(Utc::now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update definitions pipeline timestamp and result state
+    pub async fn update_definitions_run_at(
+        pool: &SqlitePool,
+        id: &str,
+        result_state: &str,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE papers SET definitions_last_run_at = ?, definitions_result_state = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(Utc::now())
+        .bind(result_state)
+        .bind(Utc::now())
         .bind(id)
         .execute(pool)
         .await?;

@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use dotenvy::dotenv;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::env;
 use std::str::FromStr;
 use tower_http::cors::CorsLayer;
@@ -65,6 +65,11 @@ async fn main() -> Result<()> {
         .route("/api/papers/:id/process", axum::routing::post(api::papers::process_paper))
         .route("/api/papers/:id/status", get(api::papers::get_paper_status))
         .route("/api/papers/:id/file", get(api::papers::get_paper_file))
+        // Pipeline endpoints (JP-first architecture)
+        .route("/api/papers/:id/translate", axum::routing::post(api::papers::translate_paper))
+        .route("/api/papers/:id/extract-terms-jp", axum::routing::post(api::papers::extract_terms_jp))
+        .route("/api/papers/:id/scan-jp", axum::routing::post(api::papers::scan_jp))
+        .route("/api/papers/:id/generate-definitions", axum::routing::post(api::papers::generate_definitions))
         // Chunks API
         .route("/api/chunks/:id/retry", axum::routing::post(api::chunks::retry_chunk))
         // Terms API

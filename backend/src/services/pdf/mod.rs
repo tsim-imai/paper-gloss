@@ -1,5 +1,5 @@
 pub mod extraction;
 pub mod chunking;
 
-pub use extraction::{PdfExtractor, ExtractionResult};
-pub use chunking::{TextChunker, TextChunk};
+pub use extraction::PdfExtractor;
+pub use chunking::TextChunker;

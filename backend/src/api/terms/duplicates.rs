@@ -1,6 +1,5 @@
 use crate::api::error::AppError;
-use crate::models::Term;
-use crate::services::terms::{DuplicateDetectionService, DuplicatePair};
+use crate::services::terms::DuplicateDetectionService;
 use axum::{extract::State, Json};
 use serde::Serialize;
 use sqlx::SqlitePool;

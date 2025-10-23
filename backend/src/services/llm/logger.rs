@@ -3,7 +3,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error};
+use tracing::debug;
 
 /// LLM request/response logger (FR-016: Constitution Principle V)
 pub struct LlmLogger {

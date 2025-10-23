@@ -35,16 +35,32 @@
 - 目安: 800–1200語/チャンク、10–15%オーバーラップ。
 - チャンク内容ハッシュで再処理を回避（キャッシュ）。
 
-3) タグ保持翻訳（LLM）
-- 翻訳前に、英語原文の用語を LLM アシストでセンチネルタグ（`[[T:uuid]]…[[/T]]`）でマーキング。
-  - 辞書/ヒューリスティックは LLM への補助コンテキストとして提示（優先語・除外語をヒント化）。
-  - LLM応答は「タグ付きテキスト」と「タグ一覧（id, surface, lemma_en 等）」のJSONを返却。
-- タグを保持したまま `/v1/chat/completions` で日本語に翻訳（LLMには「タグ厳守」を明示）。
-- 訳文からタグを解析し、日本語側スパンに対して出現位置（occurrences）を確定。
-- 最終HTMLはタグを `<span class="term" data-term-id data-occurrence-id>` に変換。
+3) パイプライン分離（独立API）
+// 旧方針（タグ保持翻訳）は廃止。A/B/C/D に分離。
 
-4) 用語管理（LLMタグ由来）
-- STEP3でLLMが付与したタグ情報（lemma_en/surface 等）を基に `terms`/`term_variants` に登録。
+- Pipeline A: 翻訳（LLM）
+  - 責務: チャンクの翻訳を完了させる。
+  - 出力: `chunks.trans_html` を保存。
+  - paper.status: 全訳了で completed、一部失敗は processing 維持。
+  - 失敗ポリシー: 進捗ゼロか致命的例外のみ failed。
+
+- Pipeline B: 日本語用語抽出 + 辞書登録（LLM）
+  - 責務: 日本語訳から辞書を拡充（登録/正規化/重複排除）。
+  - 出力: 追加/更新件数を返す（0件でも completed_empty）。
+  - 失敗ポリシー: 前提未満足（翻訳未完了）や LLM/JSON致命エラーのみ failed。0件はエラー扱いにしない。
+
+- Pipeline C: 日本語機械スキャン（機械）
+  - 責務: 辞書と訳文を同期し occurrences を保存。
+  - 出力: 作成件数を返す（0件でも completed_empty）。
+  - 失敗ポリシー: 前提未満足（翻訳未完了）やDB障害のみ failed。
+
+- Pipeline D: 定義生成（LLM）
+  - 責務: 登録済み用語の日本語解説（2–3文）を生成・保存（既存は保持）。
+  - 出力: 生成件数を返すほか、result_state（completed_nonempty|completed_empty|failed）。
+  - 失敗ポリシー: LLM致命エラーのみ failed。0件はエラーにしない。
+
+4) 用語管理（辞書登録）
+- Pipeline B の抽出結果（lemma_ja/lemma_en 等）を基に `terms`/`term_variants` に登録。
 - `terms.lemma_ja` は訳文内で初出の日本語表記を暫定正規形として採用（後で編集/マージ可能）。
 
 5) 用語解説（LLM）
@@ -52,7 +68,7 @@
 - 重要語から優先キュー処理（頻度やTF-IDF等は将来）。
 
 6) 訳文ビュー＋ツールチップ
-- 訳文をページ表示。タグ由来の `<span.term>` をハイライト、ホバー/クリックでツールチップ（用語情報・定義）。
+- 訳文をページ表示（プレーン）。JPスキャン後にハイライト、ホバー/クリックでツールチップ（用語情報・定義）。
 - 右ペインに用語集を並行表示（検索/ソート/手動追加/編集）。
 - 原文PDFはタブ/スプリットで併置可能（PDF.js等、MVPは埋め込み程度）。
 
@@ -61,9 +77,9 @@
 - 重複候補（表記違い）を提示し、1クリックで統合（マージ）。
 
 8) 並列・再実行と監査
-- LLM呼び出しの並列数は環境変数 `AI_MAX_CONCURRENCY` で制御（既定5、上限10想定）。失敗は指数バックオフで自動リトライ。
-- タグ保持率のフェイルセーフ: 戻り訳文に含まれるタグの回収率が閾値（既定98%）未満なら自動リトライ（実装予定）。
-- 各チャンクのプロンプト/レスポンス（タグ付与後の英文・LLM出力）を保存（実装中の段階で拡充）。
+- LLM呼び出しの並列数は `AI_MAX_CONCURRENCY`（既定5）で制御。失敗は指数バックオフで自動リトライ。
+- 各工程は独立APIで再実行可能。0件は completed_empty として扱う（後続で再実行可）。
+- ログは翻訳/抽出のプロンプト・レスポンスを保存（PII配慮）。
 
 ---
 
@@ -89,7 +105,7 @@
   - `id`, `term_id`, `lang`(ja固定), `text`, `provider`, `updated_at`
 - `occurrences`（出現位置）:
   - `id`, `term_id`, `paper_id`, `chunk_id`, `start`, `end`, `surface`, `method`, `variant_id?`
-    - `method`: 'tagged-translation'（タグ保持翻訳由来）を既定値に追加
+    - `method`: 'jp-scan'（日本語機械スキャン由来）
 
 > 備考: `terms`は概念中心。英語/日本語/表記揺れは`term_variants`に集約して相互検索可能にする。
 
@@ -102,17 +118,21 @@
 
 ---
 
-## API（下位互換を意識した草案）
-- `POST /api/papers/import`（file or url）→ `paper_id`
-- `POST /api/papers/{id}/process`（非同期で抽出/翻訳/抽出/解説を順次実行）
-- `GET  /api/papers/{id}/translation`（段落/チャンクごとのHTMLを返却）
-- `GET  /api/terms?q=&lang=`（両言語検索、正規化照合）
-- `POST /api/terms`（手動登録: lemma_en/ja, variants, note）
-- `PATCH /api/terms/{id}`（編集/統合）
-- `POST /api/terms/{id}/define`（AIによる日本語解説の生成・更新）
-- `GET  /api/occurrences?paper_id=`（出現位置の列挙）
+## API（独立パイプライン）
+ - `POST /api/papers/import`（file or url）→ `paper_id`（自動処理なし、status=pending）
+ - `POST /api/papers/{id}/translate`（A）
+ - `POST /api/papers/{id}/extract-terms-jp`（B）
+ - `POST /api/papers/{id}/scan-jp`（C）
+ - `POST /api/papers/{id}/generate-definitions`（D）
+ - `POST /api/terms/{id}/define`（D: 単語単位の再生成）
+ - `GET  /api/papers/{id}/status`（A/B/C/Dの進捗・result_state を返却）
+ - `GET  /api/papers/{id}/translation`（チャンクごとのHTML）
+ - `GET  /api/terms?q=&lang=`（両言語検索、正規化照合）
+ - `POST /api/terms`（手動登録: lemma_en/ja, variants, note）
+ - `PATCH /api/terms/{id}`（編集/統合）
+ - `GET  /api/occurrences?paper_id=`（出現位置の列挙）
 
-変更点（タグ保持翻訳）:
+変更点（タグ保持翻訳 → JP-first）:
 - `/translation` はタグを `<span class="term" data-term-id data-occurrence-id>` に展開済みのHTMLを返す。
 - 返却の順序や構造は従来通り（チャンク昇順）。
 
@@ -121,16 +141,14 @@
 ---
 
 ## LLM プロンプト方針（MVP）
-- 事前タグ付け（system の例）:
-  - 「あなたは英語科学論文の用語アノテータです。入力テキストから専門用語・固有名詞を抽出し、原文テキストを変更せずにセンチネルタグ `[[T:ID]]` と `[[/T]]` で囲って返してください。タグ以外の文字は一切変更しないでください。出力は JSON で、`tagged_text` と `tags:[{id, surface, lemma_en, pos?}]` を含めてください。タグIDは一意のUUIDです。」
-- 事前タグ付け（user の例）:
-  - 「テキスト: ...\n 優先語: ...\n 除外語: ...\n 上限: 200件。最長一致・辞書語優先。ネスト禁止。」
 - 翻訳（system の例）:
-  - 「あなたは科学技術論文の翻訳者です。数式・記号・参照は保持し、平易な日本語に訳します。センチネルタグ `[[T:...]]`/`[[/T]]` は厳密に保持し、タグ内のみ翻訳してください。」
+  - 「あなたは科学技術論文の翻訳者です。数式・記号・参照は保持し、平易で一貫した日本語に訳します。」
 - 翻訳（user の例）:
-  - 「次のタグ付きテキストを翻訳してください。タグは保持してください。」+ タグ付け済みチャンク本文
-- 解説（user の例）:
-  - 「次の用語を日本語で2–3文で簡潔に説明してください。専門外にも伝わる要点重視。」
+  - 「次のテキストを日本語に翻訳してください。段落構造は維持してください。」
+- JP用語抽出（system の例）:
+  - 「あなたは日本語論文の用語アノテータです。出力は JSON 配列のみ。各要素は {lemma_ja, lemma_en, reading_kana?, pos?, variants_ja?}。本文を変更・要約しない。スパンは返さない。」
+- JP用語抽出（user の例）:
+  - 「テキスト: ...\n 一般語は除外。重複は統合して代表表記を lemma_ja とする。」
 
 ---
 
@@ -151,7 +169,7 @@ data/
 
 ## 受け入れ基準（MVP）
 - 任意のPDF/URLを投入し、訳文がページで閲覧できる。
-- 訳文内でタグ由来の `<span.term>` がハイライトされ、ツールチップに日本語解説が表示される。
+- 訳文内で JPスキャンに基づくハイライトが表示され、ツールチップに日本語解説が表示される。
 - 用語集で両言語検索・手動登録・編集・統合ができる。
 - LLM呼び出しは `AI_MAX_CONCURRENCY`（既定5）を順守し、失敗チャンクはリトライ可能。
 
@@ -162,7 +180,7 @@ data/
 - `AI_API_KEY` : 認証トークン
 - `AI_MAX_CONCURRENCY`: LLM同時実行の上限（整数、既定5）
 - `AI_REQUEST_TIMEOUT_SECS`: LLMリクエストのHTTPタイムアウト秒（既定600=10分）
-- タグ保持率が既定閾値（98%）未満の場合は自動でリトライされ、最終的に閾値以上である。
+
 
 ---
 

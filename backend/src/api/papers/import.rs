@@ -1,16 +1,14 @@
 use crate::api::error::AppError;
-use crate::models::{Paper, PaperStatus};
-use crate::services::PaperProcessor;
+use crate::models::Paper;
 use axum::{
     extract::{Multipart, State},
     http::{header, HeaderMap, StatusCode},
     Json,
 };
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::SqlitePool;
 use std::fs;
-use std::path::PathBuf;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -148,35 +146,7 @@ async fn handle_file_upload(
             AppError::InternalServerError(format!("Failed to create paper: {}", e))
         })?;
 
-    // Trigger async processing
-    let pool_clone = pool.clone();
-    let paper_id_clone = paper.id.clone();
-    tokio::spawn(async move {
-        let processor = match PaperProcessor::new(pool_clone.clone()) {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::error!("Failed to create processor: {}", e);
-                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
-                return;
-            }
-        };
-
-        let result = AssertUnwindSafe(async { processor.process_paper(&paper_id_clone).await })
-            .catch_unwind()
-            .await;
-
-        match result {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                tracing::error!("Paper processing failed: {}", e);
-                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
-            }
-            Err(_) => {
-                tracing::error!("Paper processing panicked");
-                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
-            }
-        }
-    });
+    // Do NOT auto-start processing on import. Paper stays 'pending' until client calls POST /papers/{id}/process`.
 
     // Build Location header
     let mut headers = HeaderMap::new();
@@ -192,8 +162,8 @@ async fn handle_file_upload(
         headers,
         Json(ImportResponse {
             paper_id: paper.id,
-            status: "processing".to_string(),
-            message: "Paper imported successfully. Processing started.".to_string(),
+            status: "pending".to_string(),
+            message: "Paper imported successfully. Start with POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
         }),
     ))
 }
@@ -283,35 +253,7 @@ async fn handle_arxiv_import(
             AppError::InternalServerError(format!("Failed to create paper: {}", e))
         })?;
 
-    // Trigger async processing
-    let pool_clone = pool.clone();
-    let paper_id_clone = paper.id.clone();
-    tokio::spawn(async move {
-        let processor = match PaperProcessor::new(pool_clone.clone()) {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::error!("Failed to create processor: {}", e);
-                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
-                return;
-            }
-        };
-
-        let result = AssertUnwindSafe(async { processor.process_paper(&paper_id_clone).await })
-            .catch_unwind()
-            .await;
-
-        match result {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                tracing::error!("Paper processing failed: {}", e);
-                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
-            }
-            Err(_) => {
-                tracing::error!("Paper processing panicked");
-                let _ = Paper::update_status(&pool_clone, &paper_id_clone, PaperStatus::Failed).await;
-            }
-        }
-    });
+    // Do NOT auto-start processing on import. Paper stays 'pending' until client calls POST /papers/{id}/process`.
 
     // Build Location header
     let mut headers = HeaderMap::new();
@@ -327,10 +269,8 @@ async fn handle_arxiv_import(
         headers,
         Json(ImportResponse {
             paper_id: paper.id,
-            status: "processing".to_string(),
-            message: "Paper imported successfully. Processing started.".to_string(),
+            status: "pending".to_string(),
+            message: "Paper imported successfully. Start with POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
         }),
     ))
 }
-use futures::FutureExt;
-use std::panic::AssertUnwindSafe;

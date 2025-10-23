@@ -21,6 +21,9 @@ pub struct OccurrenceResponse {
     pub chunk_id: String,
     pub start_pos: i32,
     pub end_pos: i32,
+    pub surface: Option<String>,
+    pub method: String,
+    pub variant_id: Option<String>,
     pub created_at: String,
 }
 
@@ -63,6 +66,9 @@ pub async fn list_occurrences(
             chunk_id: o.chunk_id,
             start_pos: o.start_pos,
             end_pos: o.end_pos,
+            surface: o.surface,
+            method: o.method,
+            variant_id: o.variant_id,
             created_at: o.created_at.to_rfc3339(),
         })
         .collect();

@@ -1,8 +1,7 @@
 use crate::models::{Chunk, Paper, PaperStatus, Term};
 use crate::services::llm::{LlmClient, LlmLogger};
 use crate::services::pdf::{PdfExtractor, TextChunker};
-use crate::services::terms::{TermExtractor, OccurrenceTracker, DefinitionGenerator, TermTagger};
-use crate::services::terms::{strip_sentinels, TagInfo};
+use crate::services::terms::{DefinitionGenerator, JapaneseTermExtractor, OccurrenceScannerJa};
 use crate::services::translation::TranslationService;
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
@@ -24,6 +23,45 @@ impl PaperProcessor {
             translation_service: TranslationService::new()?,
             llm_client: LlmClient::new()?,
         })
+    }
+
+    /// Check if another pipeline is running for this paper (exclusive lock via table)
+    async fn check_pipeline_lock(&self, paper_id: &str) -> Result<()> {
+        let exists: Option<i64> = sqlx::query_scalar(
+            r#"SELECT 1 FROM pipeline_locks WHERE paper_id = ? LIMIT 1"#,
+        )
+        .bind(paper_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        if exists.is_some() {
+            anyhow::bail!("Another pipeline is already running for this paper");
+        }
+        Ok(())
+    }
+
+    /// Acquire pipeline lock by inserting a row (paper-scoped, single lock)
+    async fn acquire_pipeline_lock(&self, paper_id: &str) -> Result<PaperStatus> {
+        use chrono::Utc;
+        let paper = Paper::find_by_id(&self.pool, paper_id).await?;
+        sqlx::query(
+            r#"INSERT INTO pipeline_locks (paper_id, pipeline, locked_at) VALUES (?, 'generic', ?)"#,
+        )
+        .bind(paper_id)
+        .bind(Utc::now())
+        .execute(&self.pool)
+        .await?;
+        Ok(paper.status.clone())
+    }
+
+    /// Release pipeline lock by deleting the row (no status mutation)
+    async fn release_pipeline_lock(&self, paper_id: &str, _previous_status: PaperStatus) -> Result<()> {
+        sqlx::query(
+            r#"DELETE FROM pipeline_locks WHERE paper_id = ?"#,
+        )
+        .bind(paper_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Process a paper: extract, chunk, and translate
@@ -109,43 +147,11 @@ impl PaperProcessor {
             .context("Failed to create chunk")?;
         }
 
-        // Step 5: LLM-assisted tagging on English source (parallel)
-        use futures::stream::{self, StreamExt};
-        let tagger = TermTagger::new(self.llm_client.clone());
-        info!("Tagging terms in {} chunks for paper {}", chunks.len(), paper_id);
-        let source_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
-        let conc: usize = std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
-        let tagging_results: Vec<_> = stream::iter(source_texts.into_iter())
-            .map(|text| {
-                let tagger = tagger.clone();
-                async move { tagger.annotate(&text, None).await }
-            })
-            .buffer_unordered(conc)
-            .collect()
-            .await;
-
-        let mut tagged_en_list: Vec<String> = Vec::with_capacity(chunks.len());
-        let mut tag_meta_list: Vec<std::collections::HashMap<String, TagInfo>> = Vec::with_capacity(chunks.len());
-        for (i, res) in tagging_results.into_iter().enumerate() {
-            match res {
-                Ok(tagged) => {
-                    tagged_en_list.push(tagged.tagged_text.clone());
-                    let mut map = std::collections::HashMap::new();
-                    for t in tagged.tags { map.insert(t.id.clone(), t); }
-                    tag_meta_list.push(map);
-                }
-                Err(e) => {
-                    warn!("Tagging failed for chunk {}: {} (falling back to untagged)", i, e);
-                    tagged_en_list.push(chunks[i].text.clone());
-                    tag_meta_list.push(std::collections::HashMap::new());
-                }
-            }
-        }
-
-        // Step 6: Translate tagged chunks in parallel (FR-014)
+        // Step 5: Translate plain chunks in parallel (FR-014)
         let llm_logger = LlmLogger::new(paper_id)?;
-        info!("Translating {} tagged chunks for paper {}", tagged_en_list.len(), paper_id);
-        let results = self.translation_service.translate_tagged_chunks(tagged_en_list.clone()).await;
+        info!("Translating {} chunks in parallel for paper {}", chunks.len(), paper_id);
+        let source_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+        let results = self.translation_service.translate_chunks(source_texts).await;
 
         // Process translation results → render HTML and store occurrences
         let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
@@ -157,35 +163,20 @@ impl PaperProcessor {
             if let Some(db_chunk) = db_chunk {
                 match result {
                     Ok(translation_result) => {
-                        // Render HTML and create occurrences from tagged JA text
-                        let meta_map = &tag_meta_list[index];
-                        let html = self.render_html_and_occurrences(
-                            paper_id,
-                            &db_chunk.id,
-                            &tagged_en_list[index],
-                            &translation_result.translated_text,
-                            meta_map,
-                        )
-                        .await
-                        .unwrap_or_else(|e| {
-                            warn!("Failed to render occurrences for chunk {}: {}", chunk.index, e);
-                            // Fallback: strip tags to plain text
-                            strip_sentinels(&translation_result.translated_text)
-                        });
-
-                        Chunk::update_translation(&self.pool, &db_chunk.id, html.clone()).await?;
+                        // Store translated plain text
+                        Chunk::update_translation(&self.pool, &db_chunk.id, translation_result.translated_text.clone()).await?;
 
                         llm_logger
                             .log_translation(
                                 &db_chunk.id,
                                 &chunk.text,
-                                Some(&html),
+                                Some(&translation_result.translated_text),
                                 None,
                                 translation_result.duration.as_millis(),
                             )
                             .ok();
 
-                        debug!("Translated (tagged) chunk {} for paper {}", chunk.index, paper_id);
+                        debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
                         // Recalculate and update paper status immediately
                         let _ = self.recalc_paper_status(paper_id).await;
                     }
@@ -224,9 +215,19 @@ impl PaperProcessor {
             return Ok(());
         }
 
-        // Step 7/8: Term extraction + occurrences はタグ由来のため完了済み
+        // Step 6: Extract JP terms (with lemma_en) and register
+        info!("Extracting JP terms for paper {}", paper_id);
+        if let Err(e) = self.extract_jp_terms_and_register(paper_id).await {
+            warn!("JP term extraction failed for paper {}: {}", paper_id, e);
+        }
 
-        // Step 9: Generate definitions for extracted terms
+        // Step 7: Scan JP occurrences and store (non-blocking)
+        info!("Scanning JP occurrences for paper {}", paper_id);
+        if let Err(e) = self.scan_jp_occurrences(paper_id).await {
+            warn!("JP occurrence scanning failed for paper {}: {}", paper_id, e);
+        }
+
+        // Step 8: Generate definitions for extracted terms (optional)
         info!("Generating definitions for paper {}", paper_id);
         if let Err(e) = self.generate_definitions(paper_id).await {
             warn!("Definition generation failed for paper {}: {}", paper_id, e);
@@ -249,89 +250,7 @@ impl PaperProcessor {
         Ok(())
     }
 
-    /// Extract terms from paper source text in parallel (FR-014)
-    async fn extract_terms(&self, paper_id: &str) -> Result<()> {
-        use futures::stream::{self, StreamExt};
-
-        let term_extractor = TermExtractor::new(self.llm_client.clone(), self.pool.clone());
-
-        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
-
-        // Filter chunks with translations
-        let chunks_to_process: Vec<_> = chunks
-            .into_iter()
-            .filter(|chunk| chunk.trans_html.is_some())
-            .collect();
-
-        info!("Extracting terms from {} chunks in parallel", chunks_to_process.len());
-
-        // Extract terms from each chunk in parallel (up to 10 concurrent per FR-014)
-        let results: Vec<_> = stream::iter(chunks_to_process)
-            .map(|chunk| {
-                let extractor = term_extractor.clone();
-                let paper_id = paper_id.to_string();
-                async move {
-                    let chunk_id = chunk.id.clone();
-                    match extractor.extract_terms(&chunk.src_text).await {
-                        Ok(extracted_terms) => {
-                            extractor
-                                .store_terms(&paper_id, &chunk_id, extracted_terms)
-                                .await
-                                .map(|_| chunk_id.clone())
-                        }
-                        Err(e) => Err(e),
-                    }
-                }
-            })
-            .buffer_unordered(10) // Max 10 concurrent (FR-014)
-            .collect()
-            .await;
-
-        // Log results
-        let mut success_count = 0;
-        let mut error_count = 0;
-        for result in results {
-            match result {
-                Ok(chunk_id) => {
-                    debug!("Extracted terms from chunk {}", chunk_id);
-                    success_count += 1;
-                }
-                Err(e) => {
-                    warn!("Failed to extract terms: {}", e);
-                    error_count += 1;
-                }
-            }
-        }
-
-        info!(
-            "Term extraction completed: {} succeeded, {} failed",
-            success_count, error_count
-        );
-
-        Ok(())
-    }
-
-    /// Track term occurrences in source text (English)
-    async fn track_occurrences(&self, paper_id: &str) -> Result<()> {
-        let tracker = OccurrenceTracker::new(self.pool.clone());
-
-        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
-
-        for chunk in chunks {
-            // Track occurrences in source (English) text since terms are extracted from English
-            match tracker.track_occurrences(paper_id, &chunk.id, &chunk.src_text).await {
-                Ok(count) => {
-                    debug!("Tracked {} occurrences in chunk {}", count, chunk.id);
-                }
-                Err(e) => {
-                    warn!("Failed to track occurrences in chunk {}: {}", chunk.id, e);
-                    // Continue with other chunks
-                }
-            }
-        }
-
-        Ok(())
-    }
+    // Old English-based extraction and tracking functions removed in JP-first flow
 
     /// Retry translation for a specific chunk (FR-032)
     pub async fn retry_chunk(&self, chunk_id: &str) -> Result<()> {
@@ -384,7 +303,8 @@ impl PaperProcessor {
     }
 
     /// Generate definitions for terms without definitions in parallel (FR-014)
-    async fn generate_definitions(&self, paper_id: &str) -> Result<()> {
+    /// Returns (success_count, error_count)
+    async fn generate_definitions(&self, paper_id: &str) -> Result<(usize, usize)> {
         use futures::stream::{self, StreamExt};
 
         let def_generator = DefinitionGenerator::new(self.llm_client.clone(), self.pool.clone());
@@ -421,7 +341,7 @@ impl PaperProcessor {
 
         info!("Generating definitions for {} terms in parallel", terms_to_generate.len());
 
-        // Generate definitions in parallel (up to 10 concurrent per FR-014)
+        // Generate definitions in parallel (respect AI_MAX_CONCURRENCY)
         let results: Vec<_> = stream::iter(terms_to_generate)
             .map(|term| {
                 let generator = def_generator.clone();
@@ -436,7 +356,7 @@ impl PaperProcessor {
                     }
                 }
             })
-            .buffer_unordered(10) // Max 10 concurrent (FR-014)
+            .buffer_unordered(std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5))
             .collect()
             .await;
 
@@ -461,112 +381,245 @@ impl PaperProcessor {
             success_count, error_count
         );
 
+        Ok((success_count, error_count))
+    }
+
+    /// Pipeline A: Translate all chunks for a paper
+    pub async fn translate_paper(&self, paper_id: &str) -> Result<()> {
+        info!("Pipeline A: Starting translation for paper {}", paper_id);
+
+        // Check lock
+        self.check_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+
+        let result = self.translate_paper_internal(paper_id).await;
+
+        // Release lock regardless of result
+        let _ = self.release_pipeline_lock(paper_id, prev_status).await;
+
+        match &result {
+            Ok(_) => {
+                // Update timestamp
+                let _ = Paper::update_translation_run_at(&self.pool, paper_id).await;
+                // Recalculate status based on translation results
+                let _ = self.recalc_paper_status(paper_id).await;
+            }
+            Err(_) => {
+                // All failed or fatal error → mark failed per spec
+                let _ = Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await;
+            }
+        }
+
+        result
+    }
+
+    async fn translate_paper_internal(&self, paper_id: &str) -> Result<()> {
+        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+
+        if chunks.is_empty() {
+            anyhow::bail!("No chunks found for paper {}. Please import the paper first.", paper_id);
+        }
+
+        let llm_logger = LlmLogger::new(paper_id)?;
+        info!("Translating {} chunks in parallel for paper {}", chunks.len(), paper_id);
+
+        let source_texts: Vec<String> = chunks.iter().map(|c| c.src_text.clone()).collect();
+        let results = self.translation_service.translate_chunks(source_texts).await;
+
+        for (index, result) in results.into_iter().enumerate() {
+            let chunk = &chunks[index];
+
+            match result {
+                Ok(translation_result) => {
+                    Chunk::update_translation(&self.pool, &chunk.id, translation_result.translated_text.clone()).await?;
+
+                    llm_logger
+                        .log_translation(
+                            &chunk.id,
+                            &chunk.src_text,
+                            Some(&translation_result.translated_text),
+                            None,
+                            translation_result.duration.as_millis(),
+                        )
+                        .ok();
+
+                    debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
+                }
+                Err(e) => {
+                    warn!("Translation failed for chunk {}: {}", chunk.index, e);
+
+                    Chunk::update_status(&self.pool, &chunk.id, "failed", Some(e.to_string())).await.ok();
+
+                    llm_logger
+                        .log_translation(
+                            &chunk.id,
+                            &chunk.src_text,
+                            None,
+                            Some(e.to_string()),
+                            0,
+                        )
+                        .ok();
+                }
+            }
+        }
+
+        let translated_count = Chunk::count_translated_by_paper_id(&self.pool, paper_id).await?;
+
+        if translated_count == 0 {
+            anyhow::bail!("No chunks were successfully translated");
+        }
+
+        info!("Pipeline A completed: {}/{} chunks translated", translated_count, chunks.len());
         Ok(())
+    }
+
+    /// Pipeline B: Extract Japanese terms from translated text
+    pub async fn extract_terms_jp(&self, paper_id: &str) -> Result<()> {
+        info!("Pipeline B: Starting JP term extraction for paper {}", paper_id);
+
+        // Check lock
+        self.check_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+
+        let result = self.extract_jp_terms_and_register(paper_id).await;
+
+        // Update timestamp (even on Ok - 0 terms is valid)
+        if result.is_ok() {
+            let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id).await;
+        }
+
+        // Release lock
+        self.release_pipeline_lock(paper_id, prev_status).await.ok();
+
+        result
+    }
+
+    /// Pipeline C: Scan Japanese text for term occurrences
+    pub async fn scan_jp(&self, paper_id: &str) -> Result<()> {
+        info!("Pipeline C: Starting JP occurrence scanning for paper {}", paper_id);
+
+        // Check lock
+        self.check_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+
+        let result = self.scan_jp_occurrences(paper_id).await;
+
+        // Update timestamp (even on Ok - 0 occurrences is valid)
+        if result.is_ok() {
+            let _ = Paper::update_scan_jp_run_at(&self.pool, paper_id).await;
+        }
+
+        // Release lock
+        self.release_pipeline_lock(paper_id, prev_status).await.ok();
+
+        result
+    }
+
+    /// Pipeline D: Generate definitions for extracted terms
+    pub async fn generate_definitions_pipeline(&self, paper_id: &str) -> Result<()> {
+        info!("Pipeline D: Starting definition generation for paper {}", paper_id);
+
+        // Check lock
+        self.check_pipeline_lock(paper_id).await?;
+        let prev_status = self.acquire_pipeline_lock(paper_id).await?;
+
+        let result = self.generate_definitions(paper_id).await;
+
+        // Update timestamp and result_state based on outcome
+        match &result {
+            Ok((success_count, error_count)) => {
+                let result_state = if *success_count > 0 {
+                    "completed_nonempty"
+                } else if *error_count == 0 {
+                    "completed_empty"
+                } else {
+                    "failed"
+                };
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, result_state).await;
+            }
+            Err(_) => {
+                // On error, mark as failed
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, "failed").await;
+            }
+        }
+
+        // Release lock
+        self.release_pipeline_lock(paper_id, prev_status).await.ok();
+
+        result.map(|_| ())
     }
 }
 
 impl PaperProcessor {
-    /// Render tagged JA output into span HTML and store occurrences & terms.
-    async fn render_html_and_occurrences(
-        &self,
-        paper_id: &str,
-        chunk_id: &str,
-        tagged_en: &str,
-        tagged_ja: &str,
-        meta_map: &std::collections::HashMap<String, TagInfo>,
-    ) -> Result<String> {
+    // JP term extraction + registration
+    async fn extract_jp_terms_and_register(&self, paper_id: &str) -> Result<()> {
         use crate::models::{Term, TermVariant};
-        use crate::models::Occurrence;
+        let extractor = JapaneseTermExtractor::new(self.llm_client.clone());
+        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+        let mut buf = String::new();
+        for c in &chunks { if let Some(t) = &c.trans_html { buf.push_str(t); buf.push_str("\n\n"); } }
+        if buf.trim().is_empty() { return Ok(()); }
 
-        // Build HTML by scanning tagged_ja
-        let mut html = String::with_capacity(tagged_ja.len() + 256);
-        let mut plain_idx: i32 = 0; // count characters in plain JA
-        let mut i: usize = 0; // byte index at char boundary
-        let mut stack: Vec<(String, i32, usize)> = Vec::new(); // (id, start_plain, start_i)
+        let mut terms = extractor.extract_from_text(&buf, Some(4000)).await.unwrap_or_default();
 
-        // Helper: slugify EN lemma
-        fn slugify(s: &str) -> String {
+        // Deduplicate by normalized JA
+        use crate::services::terms::normalize_japanese;
+        use std::collections::HashSet;
+        let mut seen: HashSet<String> = HashSet::new();
+        terms.retain(|t| {
+            let key = normalize_japanese(&t.lemma_ja);
+            if seen.contains(&key) { return false; }
+            seen.insert(key);
+            true
+        });
+
+        fn slugify_en(s: &str) -> String {
+            if s.trim().is_empty() { return uuid::Uuid::new_v4().to_string(); }
             let s = s.to_lowercase();
             let mut out = String::with_capacity(s.len());
-            for ch in s.chars() {
-                if ch.is_ascii_alphanumeric() { out.push(ch); }
-                else if ch == ' ' || ch == '_' || ch == '-' { out.push('-'); }
-            }
-            while out.contains("--") { out = out.replace("--", "-"); }
+            for ch in s.chars() { if ch.is_ascii_alphanumeric() { out.push(ch); } else if ch==' '||ch=='_'||ch=='-' { out.push('-'); } }
+            while out.contains("--") { out = out.replace("--","-"); }
             out.trim_matches('-').to_string()
         }
 
-        while i < tagged_ja.len() {
-            if tagged_ja[i..].starts_with("[[T:") {
-                if let Some(close) = tagged_ja[i+4..].find("]]") {
-                    let id = &tagged_ja[i+4 .. i+4+close];
-                    stack.push((id.to_string(), plain_idx, i));
-                    i += 4 + close + 2; // skip header ']]'
-                    continue;
+        for t in terms.into_iter() {
+            let slug = slugify_en(&t.lemma_en);
+            let term_id = match Term::find_by_slug(&self.pool, &slug).await {
+                Ok(term) => term.id,
+                Err(_) => {
+                    let term = Term::create(
+                        &self.pool,
+                        slug.clone(),
+                        t.lemma_en.clone(),
+                        t.lemma_ja.clone(),
+                        t.reading_kana.clone(),
+                        t.pos.clone(),
+                        None,
+                        None,
+                    ).await?;
+                    term.id
                 }
-            }
-            if tagged_ja[i..].starts_with("[[/T]]") {
-                let (id, start_plain, start_i) = stack.pop().ok_or_else(|| anyhow::anyhow!("closing tag without open"))?;
-                let inner = &tagged_ja[start_i..i];
-                let surface_ja = strip_sentinels(inner);
-                let end_plain = plain_idx;
-
-                // Determine term
-                let lemma_en = meta_map.get(&id).and_then(|t| t.lemma_en.clone()).unwrap_or_else(|| {
-                    // fallback to EN surface from tagged_en
-                    // find corresponding EN surface by locating id segment
-                    if let Some(pos) = tagged_en.find(&format!("[[T:{}]]", id)) {
-                        // rough extraction
-                        let after = &tagged_en[pos+("[[T:".len()+id.len()+2)..];
-                        if let Some(end) = after.find("[[/T]]") { strip_sentinels(&after[..end]) } else { strip_sentinels(after) }
-                    } else { "unknown".to_string() }
-                });
-                let slug = slugify(&lemma_en);
-
-                // Upsert term
-                let term_id = match Term::find_by_slug(&self.pool, &slug).await {
-                    Ok(t) => t.id,
-                    Err(_) => {
-                        // First time: use surface_ja as lemma_ja
-                        let t = Term::create(&self.pool, slug.clone(), lemma_en.clone(), surface_ja.clone(), None, None, None, None).await?;
-                        t.id
-                    }
-                };
-
-                // Variants (best-effort)
-                let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), surface_ja.clone()).await;
-                if let Some(meta) = meta_map.get(&id) {
-                    let _ = TermVariant::create(&self.pool, term_id.clone(), "en".into(), meta.surface.clone()).await;
-                }
-
-                // Create occurrence
-                let occ = Occurrence::create_ext(
-                    &self.pool,
-                    &term_id,
-                    paper_id,
-                    chunk_id,
-                    start_plain,
-                    end_plain,
-                    Some(&surface_ja),
-                    "tagged-translation",
-                    None,
-                ).await?;
-
-                // Emit span
-                html.push_str(&format!("<span class=\"term\" data-term-id=\"{}\" data-occurrence-id=\"{}\">{}</span>", term_id, occ.id, surface_ja));
-
-                i += 6; // skip [[/T]]
-                continue;
-            }
-
-            // normal char (advance by char, not byte)
-            let ch = tagged_ja[i..].chars().next().unwrap();
-            html.push(ch);
-            i += ch.len_utf8();
-            plain_idx += 1;
+            };
+            let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), t.lemma_ja.clone()).await;
+            if let Some(vs) = t.variants_ja { for v in vs { let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), v).await; } }
         }
+        Ok(())
+    }
 
-        Ok(html)
+    // JP scanning and occurrences (non-blocking best-effort)
+    async fn scan_jp_occurrences(&self, paper_id: &str) -> Result<()> {
+        use crate::models::Occurrence;
+
+        // Clear existing jp-scan occurrences for idempotent re-run with latest dictionary
+        Occurrence::delete_by_paper_and_method(&self.pool, paper_id, "jp-scan").await?;
+        info!("Cleared existing jp-scan occurrences for paper {}", paper_id);
+
+        let scanner = OccurrenceScannerJa::new(self.pool.clone());
+        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+        for c in chunks {
+            if let Some(ref jp) = c.trans_html { let _ = scanner.scan_chunk(paper_id, &c.id, jp).await; }
+        }
+        Ok(())
     }
 
     /// Recalculate paper status based on chunk counts and update immediately.

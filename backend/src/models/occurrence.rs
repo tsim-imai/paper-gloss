@@ -15,9 +15,9 @@ pub struct Occurrence {
     pub end_pos: i32,
     pub created_at: DateTime<Utc>,
     // New fields (003 migration)
-    pub surface: Option<String>,
-    pub method: String,          // 'tagged-translation' by default
-    pub variant_id: Option<String>,
+    pub surface: Option<String>,     // Japanese text that was matched
+    pub method: String,               // 'jp-scan' for JP-first pipeline
+    pub variant_id: Option<String>,  // Link to term_variant if exists
 }
 
 impl Occurrence {
@@ -178,5 +178,43 @@ impl Occurrence {
         .await?;
 
         Ok(())
+    }
+
+    /// Delete all occurrences for a paper with a specific method (for re-run)
+    pub async fn delete_by_paper_and_method(
+        pool: &SqlitePool,
+        paper_id: &str,
+        method: &str,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            DELETE FROM occurrences WHERE paper_id = ? AND method = ?
+            "#,
+        )
+        .bind(paper_id)
+        .bind(method)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Count occurrences for a paper with a specific method
+    pub async fn count_by_paper_and_method(
+        pool: &SqlitePool,
+        paper_id: &str,
+        method: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let count: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM occurrences WHERE paper_id = ? AND method = ?
+            "#,
+        )
+        .bind(paper_id)
+        .bind(method)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(count.0)
     }
 }

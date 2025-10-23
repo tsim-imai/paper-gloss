@@ -6,6 +6,10 @@ pub mod process;
 pub mod status;
 pub mod file;
 pub mod delete;
+pub mod translate;
+pub mod extract_terms_jp;
+pub mod scan_jp;
+pub mod generate_definitions;
 
 pub use import::import_paper;
 pub use list::list_papers;
@@ -15,3 +19,7 @@ pub use process::process_paper;
 pub use status::get_paper_status;
 pub use file::get_paper_file;
 pub use delete::delete_paper;
+pub use translate::translate_paper;
+pub use extract_terms_jp::extract_terms_jp;
+pub use scan_jp::scan_jp;
+pub use generate_definitions::generate_definitions;

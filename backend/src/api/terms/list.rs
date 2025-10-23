@@ -1,5 +1,4 @@
 use crate::api::error::AppError;
-use crate::models::Term;
 use crate::services::terms::{TermSearchResult, TermSearchService};
 use axum::{
     extract::{Query, State},

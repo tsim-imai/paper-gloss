@@ -1,5 +1,5 @@
 use crate::api::error::AppError;
-use crate::models::{Chunk, Paper};
+use crate::models::{Chunk, Paper, Occurrence};
 use axum::{
     extract::{Path, State},
     Json,
@@ -8,31 +8,44 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 #[derive(Debug, Serialize)]
-pub struct ProcessingProgress {
-    pub extraction: String,
-    pub translation: TranslationProgress,
-    pub term_extraction: String,
-    pub definitions: DefinitionProgress,
-}
-
-#[derive(Debug, Serialize)]
 pub struct TranslationProgress {
     pub total_chunks: i64,
     pub completed_chunks: i64,
     pub failed_chunks: i64,
+    pub status: String,
 }
 
 #[derive(Debug, Serialize)]
-pub struct DefinitionProgress {
+pub struct TermsJpProgress {
     pub total_terms: i64,
-    pub completed_definitions: i64,
+    pub last_run_at: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ScanJpProgress {
+    pub total_occurrences: i64,
+    pub last_run_at: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DefinitionsProgress {
+    pub generated: i64,
+    pub failed: i64,
+    pub last_run_at: Option<String>,
+    pub status: String,
+    pub result_state: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ProcessingStatusResponse {
     pub paper_id: String,
     pub status: String,
-    pub progress: ProcessingProgress,
+    pub translation: TranslationProgress,
+    pub terms_jp: TermsJpProgress,
+    pub scan_jp: ScanJpProgress,
+    pub definitions: DefinitionsProgress,
 }
 
 /// GET /papers/{id}/status - Get processing status and progress for a paper
@@ -48,28 +61,54 @@ pub async fn get_paper_status(
             _ => AppError::InternalServerError(format!("Database error: {}", e)),
         })?;
 
-    // Get current progress
+    // Translation progress
     let total_chunks = Chunk::count_by_paper_id(&pool, &paper_id).await.unwrap_or(0);
-    let completed_chunks = Chunk::count_translated_by_paper_id(&pool, &paper_id)
-        .await
-        .unwrap_or(0);
-    let failed_chunks = Chunk::count_failed_by_paper_id(&pool, &paper_id)
-        .await
-        .unwrap_or(0);
+    let completed_chunks = Chunk::count_translated_by_paper_id(&pool, &paper_id).await.unwrap_or(0);
+    let failed_chunks = Chunk::count_failed_by_paper_id(&pool, &paper_id).await.unwrap_or(0);
 
-    // Count terms and definitions
+    let translation_status = if paper.status == crate::models::PaperStatus::Processing && total_chunks > 0 {
+        "processing"
+    } else if completed_chunks == total_chunks && total_chunks > 0 {
+        "completed"
+    } else if total_chunks > 0 {
+        "processing"
+    } else {
+        "idle"
+    };
+
+    // Terms JP progress
     let total_terms: i64 = sqlx::query_scalar(
         r#"
-        SELECT COUNT(DISTINCT term_id) FROM occurrences
-        WHERE paper_id = ?
+        SELECT COUNT(*) FROM terms
         "#,
     )
-    .bind(&paper_id)
     .fetch_one(&pool)
     .await
     .unwrap_or(0);
 
-    let completed_definitions: i64 = sqlx::query_scalar(
+    let terms_jp_status = if paper.terms_jp_last_run_at.is_some() {
+        if total_terms > 0 { "completed" } else { "completed" } // completed_empty is valid
+    } else if paper.status == crate::models::PaperStatus::Processing {
+        "processing"
+    } else {
+        "idle"
+    };
+
+    // Scan JP progress
+    let total_occurrences = Occurrence::count_by_paper_and_method(&pool, &paper_id, "jp-scan")
+        .await
+        .unwrap_or(0);
+
+    let scan_jp_status = if paper.scan_jp_last_run_at.is_some() {
+        if total_occurrences > 0 { "completed" } else { "completed" } // completed_empty is valid
+    } else if paper.status == crate::models::PaperStatus::Processing {
+        "processing"
+    } else {
+        "idle"
+    };
+
+    // Definitions progress
+    let generated_definitions: i64 = sqlx::query_scalar(
         r#"
         SELECT COUNT(DISTINCT d.term_id) FROM definitions d
         INNER JOIN occurrences o ON d.term_id = o.term_id
@@ -81,37 +120,45 @@ pub async fn get_paper_status(
     .await
     .unwrap_or(0);
 
-    // Determine extraction status
-    let extraction_status = if total_chunks > 0 {
-        "completed"
-    } else {
-        "pending"
-    };
+    let failed_definitions = 0i64; // We don't track individual failures, only overall result_state
 
-    // Determine term extraction status
-    let term_extraction_status = if total_terms > 0 {
-        "completed"
-    } else if total_chunks > 0 && completed_chunks > 0 {
+    let definitions_status = if paper.definitions_last_run_at.is_some() {
+        match paper.definitions_result_state.as_deref() {
+            Some("completed_nonempty") | Some("completed_empty") => "completed",
+            Some("failed") => "failed",
+            _ => "idle",
+        }
+    } else if paper.status == crate::models::PaperStatus::Processing {
         "processing"
     } else {
-        "pending"
+        "idle"
     };
 
     Ok(Json(ProcessingStatusResponse {
         paper_id,
         status: paper.status.to_string(),
-        progress: ProcessingProgress {
-            extraction: extraction_status.to_string(),
-            translation: TranslationProgress {
-                total_chunks,
-                completed_chunks,
-                failed_chunks,
-            },
-            term_extraction: term_extraction_status.to_string(),
-            definitions: DefinitionProgress {
-                total_terms,
-                completed_definitions,
-            },
+        translation: TranslationProgress {
+            total_chunks,
+            completed_chunks,
+            failed_chunks,
+            status: translation_status.to_string(),
+        },
+        terms_jp: TermsJpProgress {
+            total_terms,
+            last_run_at: paper.terms_jp_last_run_at.map(|t| t.to_rfc3339()),
+            status: terms_jp_status.to_string(),
+        },
+        scan_jp: ScanJpProgress {
+            total_occurrences,
+            last_run_at: paper.scan_jp_last_run_at.map(|t| t.to_rfc3339()),
+            status: scan_jp_status.to_string(),
+        },
+        definitions: DefinitionsProgress {
+            generated: generated_definitions,
+            failed: failed_definitions,
+            last_run_at: paper.definitions_last_run_at.map(|t| t.to_rfc3339()),
+            status: definitions_status.to_string(),
+            result_state: paper.definitions_result_state.clone(),
         },
     }))
 }
