@@ -9,9 +9,10 @@ interface TranslationViewProps {
   paperId: string
 }
 
+type LanguageMode = 'en' | 'ja'
+
 export default function TranslationView({ paperId }: TranslationViewProps) {
-  const [showOriginal, setShowOriginal] = useState(true)
-  const [showTranslation, setShowTranslation] = useState(true)
+  const [languageMode, setLanguageMode] = useState<LanguageMode>('ja')
   const [hoveredTermId, setHoveredTermId] = useState<string | null>(null)
   const [pinnedTermId, setPinnedTermId] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
@@ -109,7 +110,7 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
 
   return (
     <div>
-      {/* View controls */}
+      {/* Language toggle controls */}
       <div
         style={{
           marginBottom: '1rem',
@@ -118,27 +119,41 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
           border: '1px solid #444',
           borderRadius: '8px',
           display: 'flex',
-          gap: '1rem',
+          gap: '0.5rem',
           alignItems: 'center',
         }}
       >
-        <span style={{ fontWeight: 'bold', fontSize: '0.875rem', color: '#999' }}>Display:</span>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#ccc' }}>
-          <input
-            type="checkbox"
-            checked={showOriginal}
-            onChange={(e) => setShowOriginal(e.target.checked)}
-          />
-          <span style={{ fontSize: '0.875rem' }}>Original English</span>
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#ccc' }}>
-          <input
-            type="checkbox"
-            checked={showTranslation}
-            onChange={(e) => setShowTranslation(e.target.checked)}
-          />
-          <span style={{ fontSize: '0.875rem' }}>Japanese Translation</span>
-        </label>
+        <span style={{ fontWeight: 'bold', fontSize: '0.875rem', color: '#999', marginRight: '0.25rem' }}>
+          Language:
+        </span>
+        <button
+          onClick={() => setLanguageMode('en')}
+          style={{
+            padding: '0.375rem 0.75rem',
+            fontSize: '0.75rem',
+            backgroundColor: languageMode === 'en' ? '#646cff' : '#444',
+            color: languageMode === 'en' ? 'white' : '#999',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          English
+        </button>
+        <button
+          onClick={() => setLanguageMode('ja')}
+          style={{
+            padding: '0.375rem 0.75rem',
+            fontSize: '0.75rem',
+            backgroundColor: languageMode === 'ja' ? '#646cff' : '#444',
+            color: languageMode === 'ja' ? 'white' : '#999',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Japanese
+        </button>
       </div>
 
       {/* Chunks list */}
@@ -194,8 +209,8 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
             </div>
 
             {/* Original text */}
-            {showOriginal && (
-              <div style={{ marginBottom: showTranslation ? '0.75rem' : 0 }}>
+            {languageMode === 'en' && (
+              <div>
                 <div
                   style={{
                     fontSize: '0.75rem',
@@ -211,7 +226,7 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
                   style={{
                     lineHeight: '1.6',
                     whiteSpace: 'pre-wrap',
-                    color: '#ccc',
+                    color: '#ffffff',
                   }}
                 >
                   {chunk.original_text}
@@ -220,7 +235,7 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
             )}
 
             {/* Translation */}
-            {showTranslation && (
+            {languageMode === 'ja' && (
               <div>
                 <div
                   style={{
@@ -234,7 +249,7 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
                   Translation
                 </div>
                 {chunk.translated_text ? (
-                  <div style={{ color: '#e0e0e0', lineHeight: '1.6' }}>
+                  <div style={{ color: '#ffffff', lineHeight: '1.6' }}>
                     <TermHighlight
                       text={chunk.translated_text}
                       chunkId={chunk.id}

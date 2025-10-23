@@ -36,6 +36,7 @@ impl PaperProcessor {
         if exists.is_some() {
             anyhow::bail!("Another pipeline is already running for this paper");
         }
+        Ok(())
     }
 
     /// Acquire pipeline lock by inserting a row (paper-scoped, single lock)

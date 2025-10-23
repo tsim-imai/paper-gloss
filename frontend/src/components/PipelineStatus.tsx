@@ -63,23 +63,6 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
     },
   })
 
-  // Run all pipelines sequentially
-  const runAllMutation = useMutation({
-    mutationFn: async () => {
-      await apiClient.translatePaper(paper.id)
-      // Wait a bit for translation to start
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['papers'] })
-      queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
-      queryClient.invalidateQueries({ queryKey: ['paper-status', paper.id] })
-    },
-    onError: (error: any) => {
-      alert(`Failed to start pipelines: ${error.response?.data?.message || error.message}`)
-    },
-  })
-
   const getButtonStyle = (isDisabled: boolean) => ({
     padding: '0.375rem 0.75rem',
     fontSize: '0.75rem',
@@ -93,31 +76,6 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
 
   return (
     <div>
-      {/* Quick Actions */}
-      <div
-        style={{
-          marginBottom: '1rem',
-          padding: '0.75rem',
-          backgroundColor: '#2a2a2a',
-          borderRadius: '8px',
-          border: '1px solid #444',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#e0e0e0' }}>Quick Actions:</span>
-          <button
-            onClick={() => runAllMutation.mutate()}
-            disabled={runAllMutation.isPending || statusData?.translation.status === 'processing'}
-            style={getButtonStyle(runAllMutation.isPending || statusData?.translation.status === 'processing')}
-          >
-            {runAllMutation.isPending ? 'Starting...' : '▶ Start Translation'}
-          </button>
-          <span style={{ fontSize: '0.75rem', color: '#999' }}>
-            (Other pipelines can be run after translation completes)
-          </span>
-        </div>
-      </div>
-
       {/* Pipelines in horizontal layout */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
         {/* A: Translation */}

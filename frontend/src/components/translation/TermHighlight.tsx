@@ -77,7 +77,7 @@ export default function TermHighlight({
   }, [text, chunkOccurrences])
 
   return (
-    <div style={{ lineHeight: '1.8', whiteSpace: 'pre-wrap', color: '#333' }}>
+    <div style={{ lineHeight: '1.8', whiteSpace: 'pre-wrap', color: '#ffffff' }}>
       {segments.map((segment, index) => {
         if (!segment.isHighlighted) {
           return <span key={index}>{segment.text}</span>

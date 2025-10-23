@@ -101,22 +101,37 @@ export default function PipelineCard({
         }}
       >
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', color: '#e0e0e0' }}>{title}</h3>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                padding: '0.125rem 0.5rem',
-                borderRadius: '12px',
-                backgroundColor: '#1a1a1a',
-                color: '#999',
-                fontFamily: 'monospace',
-              }}
-            >
-              {pipelineId}
-            </span>
-          </div>
+          <h3 style={{ margin: 0, fontSize: '1rem', color: '#e0e0e0' }}>{title}</h3>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#999' }}>{description}</p>
+        </div>
+        <span
+          style={{
+            fontSize: '1.25rem',
+            fontWeight: 'bold',
+            color: '#999',
+            fontFamily: 'monospace',
+            minWidth: '2rem',
+            textAlign: 'center',
+          }}
+        >
+          {pipelineId}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div style={{ marginBottom: '0.75rem', color: '#ccc', minHeight: '3rem' }}>{children}</div>
+
+      {/* Status and Last Run */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '0.75rem',
+        }}
+      >
+        <div style={{ fontSize: '0.75rem', color: '#999' }}>
+          Last run: <span style={{ color: '#ccc' }}>{formatDate(lastRunAt)}</span>
         </div>
         <div
           style={{
@@ -137,22 +152,16 @@ export default function PipelineCard({
         </div>
       </div>
 
-      {/* Content */}
-      <div style={{ marginBottom: '0.75rem', color: '#ccc' }}>{children}</div>
-
-      {/* Footer */}
+      {/* Footer - Actions */}
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           alignItems: 'center',
           paddingTop: '0.75rem',
           borderTop: '1px solid #444',
         }}
       >
-        <div style={{ fontSize: '0.75rem', color: '#999' }}>
-          Last run: <span style={{ color: '#ccc' }}>{formatDate(lastRunAt)}</span>
-        </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>{actions}</div>
       </div>
     </div>
