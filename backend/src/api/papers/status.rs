@@ -61,17 +61,30 @@ pub async fn get_paper_status(
             _ => AppError::InternalServerError(format!("Database error: {}", e)),
         })?;
 
+    // Check which pipelines are currently running by checking pipeline_locks
+    let active_pipeline: Option<String> = sqlx::query_scalar(
+        r#"SELECT pipeline FROM pipeline_locks WHERE paper_id = ? LIMIT 1"#,
+    )
+    .bind(&paper_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
     // Translation progress
     let total_chunks = Chunk::count_by_paper_id(&pool, &paper_id).await.unwrap_or(0);
     let completed_chunks = Chunk::count_translated_by_paper_id(&pool, &paper_id).await.unwrap_or(0);
     let failed_chunks = Chunk::count_failed_by_paper_id(&pool, &paper_id).await.unwrap_or(0);
 
-    let translation_status = if paper.status == crate::models::PaperStatus::Processing && total_chunks > 0 {
+    let translation_status = if active_pipeline.as_deref() == Some("translate") {
         "processing"
     } else if completed_chunks == total_chunks && total_chunks > 0 {
         "completed"
+    } else if failed_chunks == total_chunks && total_chunks > 0 {
+        "failed"
+    } else if completed_chunks > 0 && completed_chunks < total_chunks {
+        "processing" // Partial completion
     } else if total_chunks > 0 {
-        "processing"
+        "idle" // Chunks exist but not started
     } else {
         "idle"
     };
@@ -86,10 +99,10 @@ pub async fn get_paper_status(
     .await
     .unwrap_or(0);
 
-    let terms_jp_status = if paper.terms_jp_last_run_at.is_some() {
-        if total_terms > 0 { "completed" } else { "completed" } // completed_empty is valid
-    } else if paper.status == crate::models::PaperStatus::Processing {
+    let terms_jp_status = if active_pipeline.as_deref() == Some("extract-terms-jp") {
         "processing"
+    } else if paper.terms_jp_last_run_at.is_some() {
+        "completed" // completed_empty is valid
     } else {
         "idle"
     };
@@ -99,10 +112,10 @@ pub async fn get_paper_status(
         .await
         .unwrap_or(0);
 
-    let scan_jp_status = if paper.scan_jp_last_run_at.is_some() {
-        if total_occurrences > 0 { "completed" } else { "completed" } // completed_empty is valid
-    } else if paper.status == crate::models::PaperStatus::Processing {
+    let scan_jp_status = if active_pipeline.as_deref() == Some("scan-jp") {
         "processing"
+    } else if paper.scan_jp_last_run_at.is_some() {
+        "completed" // completed_empty is valid
     } else {
         "idle"
     };
@@ -122,14 +135,14 @@ pub async fn get_paper_status(
 
     let failed_definitions = 0i64; // We don't track individual failures, only overall result_state
 
-    let definitions_status = if paper.definitions_last_run_at.is_some() {
+    let definitions_status = if active_pipeline.as_deref() == Some("generate-definitions") {
+        "processing"
+    } else if paper.definitions_last_run_at.is_some() {
         match paper.definitions_result_state.as_deref() {
             Some("completed_nonempty") | Some("completed_empty") => "completed",
             Some("failed") => "failed",
             _ => "idle",
         }
-    } else if paper.status == crate::models::PaperStatus::Processing {
-        "processing"
     } else {
         "idle"
     };

@@ -424,10 +424,57 @@ impl PaperProcessor {
     async fn translate_paper_internal(&self, paper_id: &str) -> Result<()> {
         use futures::stream::{self, StreamExt};
 
-        let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
+        let mut chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
 
+        // If no chunks exist, extract from PDF and create them
         if chunks.is_empty() {
-            anyhow::bail!("No chunks found for paper {}. Please import the paper first.", paper_id);
+            info!("No chunks found for paper {}. Extracting from PDF...", paper_id);
+
+            let paper = Paper::find_by_id(&self.pool, paper_id).await?;
+            let file_path = Path::new(&paper.file_path);
+
+            // Extract text from PDF
+            let extraction_result = PdfExtractor::extract_with_recovery(file_path)?;
+
+            // Log warnings
+            for warning in &extraction_result.warnings {
+                warn!("PDF extraction warning for {}: {}", paper_id, warning);
+            }
+
+            // Check if extraction is usable
+            if !PdfExtractor::is_extraction_usable(&extraction_result) {
+                anyhow::bail!("PDF extraction produced insufficient text. The file may be corrupted, encrypted, or contain only scanned images.");
+            }
+
+            if extraction_result.is_partial {
+                warn!("PDF extraction is partial for {} - some content may be missing", paper_id);
+            }
+
+            // Chunk text
+            let chunker = TextChunker::default();
+            let text_chunks = chunker.chunk(&extraction_result.text);
+
+            if text_chunks.is_empty() {
+                anyhow::bail!("No processable content found in PDF");
+            }
+
+            info!("Created {} chunks from PDF for paper {}", text_chunks.len(), paper_id);
+
+            // Save chunks to database
+            for chunk in &text_chunks {
+                Chunk::create(
+                    &self.pool,
+                    paper_id.to_string(),
+                    chunk.index as i32,
+                    chunk.text.clone(),
+                    chunk.content_hash.clone(),
+                    chunk.token_count.map(|t| t as i32),
+                )
+                .await?;
+            }
+
+            // Reload chunks from database
+            chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
         }
 
         let llm_logger = LlmLogger::new(paper_id)?;

@@ -143,15 +143,11 @@ export interface DefinitionsProgress {
   result_state?: PipelineResultState
 }
 
-export interface PipelineProgress {
+export interface ProcessingStatusResponse {
+  paper_id: string
+  status: PaperStatus
   translation: TranslationProgress
   terms_jp: TermsJpProgress
   scan_jp: ScanJpProgress
   definitions: DefinitionsProgress
-}
-
-export interface ProcessingStatusResponse {
-  paper_id: string
-  status: PaperStatus
-  progress: PipelineProgress
 }

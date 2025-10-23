@@ -20,8 +20,6 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
     refetchInterval: 3000, // Poll every 3 seconds
   })
 
-  const progress = statusData?.progress
-
   // Pipeline mutations
   const translateMutation = useMutation({
     mutationFn: () => apiClient.translatePaper(paper.id),
@@ -109,8 +107,8 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
           <span style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#e0e0e0' }}>Quick Actions:</span>
           <button
             onClick={() => runAllMutation.mutate()}
-            disabled={runAllMutation.isPending || progress?.translation.status === 'processing'}
-            style={getButtonStyle(runAllMutation.isPending || progress?.translation.status === 'processing')}
+            disabled={runAllMutation.isPending || statusData?.translation.status === 'processing'}
+            style={getButtonStyle(runAllMutation.isPending || statusData?.translation.status === 'processing')}
           >
             {runAllMutation.isPending ? 'Starting...' : '▶ Start Translation'}
           </button>
@@ -124,34 +122,34 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
       <PipelineCard
         title="Pipeline A: Translation"
         pipelineId="translate"
-        status={progress?.translation.status || 'idle'}
+        status={statusData?.translation.status || 'idle'}
         description="Translate English text to Japanese using LLM"
         lastRunAt={paper.created_at}
         actions={
           <button
             onClick={() => translateMutation.mutate()}
-            disabled={translateMutation.isPending || progress?.translation.status === 'processing'}
-            style={getButtonStyle(translateMutation.isPending || progress?.translation.status === 'processing')}
+            disabled={translateMutation.isPending || statusData?.translation.status === 'processing'}
+            style={getButtonStyle(translateMutation.isPending || statusData?.translation.status === 'processing')}
           >
             {translateMutation.isPending ? 'Starting...' : '▶ Translate'}
           </button>
         }
       >
         <div style={{ fontSize: '0.875rem' }}>
-          {progress ? (
+          {statusData ? (
             <>
               <div>
-                Total Chunks: <strong>{progress.translation.total_chunks}</strong>
+                Total Chunks: <strong>{statusData.translation.total_chunks}</strong>
               </div>
               <div>
-                Completed: <strong style={{ color: '#4caf50' }}>{progress.translation.completed_chunks}</strong>
+                Completed: <strong style={{ color: '#4caf50' }}>{statusData.translation.completed_chunks}</strong>
               </div>
-              {progress.translation.failed_chunks > 0 && (
+              {statusData.translation.failed_chunks > 0 && (
                 <div>
-                  Failed: <strong style={{ color: '#f44336' }}>{progress.translation.failed_chunks}</strong>
+                  Failed: <strong style={{ color: '#f44336' }}>{statusData.translation.failed_chunks}</strong>
                 </div>
               )}
-              {progress.translation.status === 'processing' && (
+              {statusData.translation.status === 'processing' && (
                 <div style={{ marginTop: '0.5rem' }}>
                   <div
                     style={{
@@ -164,7 +162,7 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
                   >
                     <div
                       style={{
-                        width: `${Math.round((progress.translation.completed_chunks / progress.translation.total_chunks) * 100)}%`,
+                        width: `${Math.round((statusData.translation.completed_chunks / statusData.translation.total_chunks) * 100)}%`,
                         height: '100%',
                         backgroundColor: '#2196f3',
                         transition: 'width 0.3s ease',
@@ -184,21 +182,21 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
       <PipelineCard
         title="Pipeline B: Extract Terms (Japanese)"
         pipelineId="extract-terms-jp"
-        status={progress?.terms_jp.status || 'idle'}
+        status={statusData?.terms_jp.status || 'idle'}
         description="Extract Japanese technical terms from translations and register to dictionary"
-        lastRunAt={progress?.terms_jp.last_run_at}
+        lastRunAt={statusData?.terms_jp.last_run_at}
         actions={
           <button
             onClick={() => extractTermsMutation.mutate()}
             disabled={
               extractTermsMutation.isPending ||
-              progress?.terms_jp.status === 'processing' ||
-              progress?.translation.status !== 'completed'
+              statusData?.terms_jp.status === 'processing' ||
+              statusData?.translation.status !== 'completed'
             }
             style={getButtonStyle(
               extractTermsMutation.isPending ||
-                progress?.terms_jp.status === 'processing' ||
-                progress?.translation.status !== 'completed'
+                statusData?.terms_jp.status === 'processing' ||
+                statusData?.translation.status !== 'completed'
             )}
           >
             {extractTermsMutation.isPending ? 'Extracting...' : '▶ Extract Terms'}
@@ -206,12 +204,12 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
         }
       >
         <div style={{ fontSize: '0.875rem' }}>
-          {progress?.terms_jp ? (
+          {statusData?.terms_jp ? (
             <>
               <div>
-                Extracted Terms: <strong style={{ color: '#4caf50' }}>{progress.terms_jp.total_terms}</strong>
+                Extracted Terms: <strong style={{ color: '#4caf50' }}>{statusData.terms_jp.total_terms}</strong>
               </div>
-              {progress.translation.status !== 'completed' && (
+              {statusData.translation.status !== 'completed' && (
                 <div style={{ marginTop: '0.5rem', color: '#ff9800', fontSize: '0.75rem' }}>
                   ⚠ Requires translation to be completed first
                 </div>
@@ -227,21 +225,21 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
       <PipelineCard
         title="Pipeline C: Scan JP Occurrences"
         pipelineId="scan-jp"
-        status={progress?.scan_jp.status || 'idle'}
+        status={statusData?.scan_jp.status || 'idle'}
         description="Scan Japanese translations for term occurrences using dictionary"
-        lastRunAt={progress?.scan_jp.last_run_at}
+        lastRunAt={statusData?.scan_jp.last_run_at}
         actions={
           <button
             onClick={() => scanJpMutation.mutate()}
             disabled={
               scanJpMutation.isPending ||
-              progress?.scan_jp.status === 'processing' ||
-              progress?.translation.status !== 'completed'
+              statusData?.scan_jp.status === 'processing' ||
+              statusData?.translation.status !== 'completed'
             }
             style={getButtonStyle(
               scanJpMutation.isPending ||
-                progress?.scan_jp.status === 'processing' ||
-                progress?.translation.status !== 'completed'
+                statusData?.scan_jp.status === 'processing' ||
+                statusData?.translation.status !== 'completed'
             )}
           >
             {scanJpMutation.isPending ? 'Scanning...' : '▶ Scan Occurrences'}
@@ -249,12 +247,12 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
         }
       >
         <div style={{ fontSize: '0.875rem' }}>
-          {progress?.scan_jp ? (
+          {statusData?.scan_jp ? (
             <>
               <div>
-                Found Occurrences: <strong style={{ color: '#4caf50' }}>{progress.scan_jp.total_occurrences}</strong>
+                Found Occurrences: <strong style={{ color: '#4caf50' }}>{statusData.scan_jp.total_occurrences}</strong>
               </div>
-              {progress.translation.status !== 'completed' && (
+              {statusData.translation.status !== 'completed' && (
                 <div style={{ marginTop: '0.5rem', color: '#ff9800', fontSize: '0.75rem' }}>
                   ⚠ Requires translation to be completed first
                 </div>
@@ -270,32 +268,32 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
       <PipelineCard
         title="Pipeline D: Generate Definitions"
         pipelineId="generate-definitions"
-        status={progress?.definitions.status || 'idle'}
-        resultState={progress?.definitions.result_state}
+        status={statusData?.definitions.status || 'idle'}
+        resultState={statusData?.definitions.result_state}
         description="Generate Japanese definitions for terms using LLM"
-        lastRunAt={progress?.definitions.last_run_at}
+        lastRunAt={statusData?.definitions.last_run_at}
         actions={
           <button
             onClick={() => generateDefsMutation.mutate()}
-            disabled={generateDefsMutation.isPending || progress?.definitions.status === 'processing'}
-            style={getButtonStyle(generateDefsMutation.isPending || progress?.definitions.status === 'processing')}
+            disabled={generateDefsMutation.isPending || statusData?.definitions.status === 'processing'}
+            style={getButtonStyle(generateDefsMutation.isPending || statusData?.definitions.status === 'processing')}
           >
             {generateDefsMutation.isPending ? 'Generating...' : '▶ Generate Definitions'}
           </button>
         }
       >
         <div style={{ fontSize: '0.875rem' }}>
-          {progress?.definitions ? (
+          {statusData?.definitions ? (
             <>
               <div>
-                Generated: <strong style={{ color: '#4caf50' }}>{progress.definitions.generated}</strong>
+                Generated: <strong style={{ color: '#4caf50' }}>{statusData.definitions.generated}</strong>
               </div>
-              {progress.definitions.failed > 0 && (
+              {statusData.definitions.failed > 0 && (
                 <div>
-                  Failed: <strong style={{ color: '#f44336' }}>{progress.definitions.failed}</strong>
+                  Failed: <strong style={{ color: '#f44336' }}>{statusData.definitions.failed}</strong>
                 </div>
               )}
-              {progress.definitions.result_state === 'completed_empty' && (
+              {statusData.definitions.result_state === 'completed_empty' && (
                 <div style={{ marginTop: '0.5rem', color: '#ff9800', fontSize: '0.75rem' }}>
                   ⚠ No definitions generated (no terms found or all already have definitions)
                 </div>
