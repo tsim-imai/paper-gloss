@@ -94,12 +94,13 @@ export default function TermHighlight({
             onMouseLeave={(e) => onTermHover?.(null, e)}
             onClick={(e) => onTermClick?.(segment.termId!, e)}
             style={{
-              backgroundColor: isActive ? '#fff9c4' : '#e3f2fd',
-              borderBottom: '2px solid #1976d2',
+              backgroundColor: isActive ? '#8b6914' : '#2c5282',
+              color: isActive ? '#fff9c4' : '#a8d4ff',
+              borderBottom: '2px solid #64b5f6',
               cursor: 'pointer',
               padding: '2px 1px',
               borderRadius: '2px',
-              transition: 'background-color 0.15s ease',
+              transition: 'background-color 0.15s ease, color 0.15s ease',
             }}
           >
             {segment.text}

@@ -30,9 +30,10 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
   return (
     <div style={{
       padding: '1rem',
-      backgroundColor: '#f9f9f9',
+      backgroundColor: '#2a2a2a',
       borderRadius: '8px',
       marginBottom: '1rem',
+      border: '1px solid #444',
     }}>
       {/* Search input */}
       <div style={{ marginBottom: '1rem' }}>
@@ -56,9 +57,11 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
           style={{
             width: '100%',
             padding: '0.75rem',
-            fontSize: '1rem',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
+            fontSize: '0.875rem',
+            border: '1px solid #444',
+            borderRadius: '6px',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
           }}
         />
       </div>
@@ -72,7 +75,7 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
       }}>
         {/* Language filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label htmlFor="glossary-lang-select" style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
+          <label htmlFor="glossary-lang-select" style={{ fontSize: '0.875rem', fontWeight: '500', color: '#999' }}>
             Language:
           </label>
           <select
@@ -82,9 +85,11 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
             style={{
               padding: '0.5rem',
               fontSize: '0.875rem',
-              border: '1px solid #ccc',
+              border: '1px solid #444',
               borderRadius: '4px',
               cursor: 'pointer',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           >
             <option value="both">Both</option>
@@ -95,7 +100,7 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
 
         {/* Sort order */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label htmlFor="glossary-sort-select" style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#666' }}>
+          <label htmlFor="glossary-sort-select" style={{ fontSize: '0.875rem', fontWeight: '500', color: '#999' }}>
             Sort by:
           </label>
           <select
@@ -105,9 +110,11 @@ export default function GlossarySearch({ onSearch }: GlossarySearchProps) {
             style={{
               padding: '0.5rem',
               fontSize: '0.875rem',
-              border: '1px solid #ccc',
+              border: '1px solid #444',
               borderRadius: '4px',
               cursor: 'pointer',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           >
             <option value="alphabetical">Alphabetical</option>

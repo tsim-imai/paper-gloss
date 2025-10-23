@@ -73,12 +73,12 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
 
   return (
     <div style={{
-      border: '1px solid #ccc',
+      border: '1px solid #444',
       borderRadius: '8px',
       padding: '1.5rem',
-      backgroundColor: 'white',
+      backgroundColor: '#2a2a2a',
     }}>
-      <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>
+      <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#e0e0e0' }}>
         {isEditing ? 'Edit Term' : 'Add New Term'}
       </h3>
 
@@ -88,11 +88,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <label htmlFor="term-lemma-en" style={{
             display: 'block',
             fontSize: '0.875rem',
-            fontWeight: 'bold',
-            color: '#666',
+            fontWeight: '500',
+            color: '#999',
             marginBottom: '0.25rem',
           }}>
-            English Term <span style={{ color: '#c62828' }}>*</span>
+            English Term <span style={{ color: '#ff6b6b' }}>*</span>
           </label>
           <input
             id="term-lemma-en"
@@ -104,9 +104,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             style={{
               width: '100%',
               padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              fontSize: '0.875rem',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           />
         </div>
@@ -116,11 +118,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <label htmlFor="term-lemma-ja" style={{
             display: 'block',
             fontSize: '0.875rem',
-            fontWeight: 'bold',
-            color: '#666',
+            fontWeight: '500',
+            color: '#999',
             marginBottom: '0.25rem',
           }}>
-            Japanese Term <span style={{ color: '#c62828' }}>*</span>
+            Japanese Term <span style={{ color: '#ff6b6b' }}>*</span>
           </label>
           <input
             id="term-lemma-ja"
@@ -132,9 +134,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             style={{
               width: '100%',
               padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              fontSize: '0.875rem',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           />
         </div>
@@ -144,8 +148,8 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <label htmlFor="term-reading" style={{
             display: 'block',
             fontSize: '0.875rem',
-            fontWeight: 'bold',
-            color: '#666',
+            fontWeight: '500',
+            color: '#999',
             marginBottom: '0.25rem',
           }}>
             Reading (Kana)
@@ -159,9 +163,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             style={{
               width: '100%',
               padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              fontSize: '0.875rem',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           />
         </div>
@@ -171,8 +177,8 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <label htmlFor="term-pos" style={{
             display: 'block',
             fontSize: '0.875rem',
-            fontWeight: 'bold',
-            color: '#666',
+            fontWeight: '500',
+            color: '#999',
             marginBottom: '0.25rem',
           }}>
             Part of Speech
@@ -186,9 +192,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             style={{
               width: '100%',
               padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              fontSize: '0.875rem',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           />
         </div>
@@ -198,8 +206,8 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <label htmlFor="term-tags" style={{
             display: 'block',
             fontSize: '0.875rem',
-            fontWeight: 'bold',
-            color: '#666',
+            fontWeight: '500',
+            color: '#999',
             marginBottom: '0.25rem',
           }}>
             Tags
@@ -213,9 +221,11 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             style={{
               width: '100%',
               padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              fontSize: '0.875rem',
+              border: '1px solid #444',
+              borderRadius: '6px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           />
         </div>
@@ -225,8 +235,8 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <label htmlFor="term-note" style={{
             display: 'block',
             fontSize: '0.875rem',
-            fontWeight: 'bold',
-            color: '#666',
+            fontWeight: '500',
+            color: '#999',
             marginBottom: '0.25rem',
           }}>
             Note
@@ -240,10 +250,12 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             style={{
               width: '100%',
               padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              fontSize: '0.875rem',
+              border: '1px solid #444',
+              borderRadius: '6px',
               fontFamily: 'inherit',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
             }}
           />
         </div>
@@ -269,11 +281,12 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
             type="button"
             onClick={onCancel}
             style={{
-              padding: '0.5rem 1rem',
-              fontSize: '1rem',
-              backgroundColor: '#f5f5f5',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+              padding: '0.625rem 1.5rem',
+              fontSize: '0.875rem',
+              backgroundColor: '#444',
+              color: '#e0e0e0',
+              border: 'none',
+              borderRadius: '6px',
               cursor: 'pointer',
             }}
           >
@@ -282,13 +295,14 @@ export default function TermForm({ term, onSubmit, onCancel }: TermFormProps) {
           <button
             type="submit"
             style={{
-              padding: '0.5rem 1rem',
-              fontSize: '1rem',
+              padding: '0.625rem 1.5rem',
+              fontSize: '0.875rem',
               backgroundColor: '#646cff',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '6px',
               cursor: 'pointer',
+              fontWeight: '500',
             }}
           >
             {isEditing ? 'Update' : 'Add'} Term

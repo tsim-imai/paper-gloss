@@ -47,6 +47,7 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
     mutationFn: () => apiClient.scanJp(paper.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['paper-status', paper.id] })
+      queryClient.invalidateQueries({ queryKey: ['occurrences', paper.id] })
     },
     onError: (error: any) => {
       alert(`JP scan failed: ${error.response?.data?.message || error.message}`)

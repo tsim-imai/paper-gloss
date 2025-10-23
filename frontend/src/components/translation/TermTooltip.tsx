@@ -35,6 +35,7 @@ export default function TermTooltip({
     top: `${position.y + 20}px`, // 20px below cursor
     zIndex: 1000,
     backgroundColor: 'white',
+    color: '#666',
     border: '1px solid #ccc',
     borderRadius: '8px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
@@ -85,11 +86,6 @@ export default function TermTooltip({
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>
               {data.lemma_ja}
-              {data.reading_kana && (
-                <span style={{ fontSize: '0.875rem', color: '#666', marginLeft: '0.5rem' }}>
-                  （{data.reading_kana}）
-                </span>
-              )}
             </div>
             <div style={{ fontSize: '0.875rem', color: '#666' }}>
               {data.lemma_en}
