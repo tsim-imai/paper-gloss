@@ -470,24 +470,30 @@ impl PaperProcessor {
 
         let result = self.extract_jp_terms_and_register(paper_id).await;
 
-        // Update timestamp (even on Ok - 0 terms is valid)
-        if result.is_ok() {
-            let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id).await;
+        // Update timestamp and count (even on Ok - 0 terms is valid)
+        match &result {
+            Ok(count) => {
+                let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id, *count).await;
+            }
+            Err(_) => {}
         }
 
         // Release lock
         self.release_pipeline_lock(paper_id, "extract-terms-jp", prev_status).await.ok();
 
-        result
+        result.map(|_| ())
     }
 
     /// Pipeline B (no-lock wrapper for API-managed locking)
     pub async fn extract_terms_jp_no_lock(&self, paper_id: &str) -> Result<()> {
         let result = self.extract_jp_terms_and_register(paper_id).await;
-        if result.is_ok() {
-            let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id).await;
+        match &result {
+            Ok(count) => {
+                let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id, *count).await;
+            }
+            Err(_) => {}
         }
-        result
+        result.map(|_| ())
     }
 
     /// Pipeline C: Scan Japanese text for term occurrences
@@ -578,7 +584,8 @@ impl PaperProcessor {
 
 impl PaperProcessor {
     // JP term extraction + registration
-    async fn extract_jp_terms_and_register(&self, paper_id: &str) -> Result<()> {
+    // Returns the count of newly registered terms
+    async fn extract_jp_terms_and_register(&self, paper_id: &str) -> Result<i64> {
         use crate::models::{Term, TermVariant};
         use futures::stream::{self, StreamExt};
 
@@ -587,7 +594,7 @@ impl PaperProcessor {
 
         if chunks.is_empty() {
             warn!("No chunks found for paper {} - cannot extract terms", paper_id);
-            return Ok(());
+            return Ok(0);
         }
 
         info!("Extracting JP terms from {} chunks in parallel for paper {}", chunks.len(), paper_id);
@@ -658,6 +665,8 @@ impl PaperProcessor {
             out.trim_matches('-').to_string()
         }
 
+        let mut newly_registered_count = 0i64;
+
         for t in terms.into_iter() {
             let slug = slugify_en(&t.lemma_en);
             let term_id = match Term::find_by_slug(&self.pool, &slug).await {
@@ -673,13 +682,16 @@ impl PaperProcessor {
                         None,
                         None,
                     ).await?;
+                    newly_registered_count += 1;
                     term.id
                 }
             };
             let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), t.lemma_ja.clone()).await;
             if let Some(vs) = t.variants_ja { for v in vs { let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), v).await; } }
         }
-        Ok(())
+
+        info!("Pipeline B completed: {} new terms registered for paper {}", newly_registered_count, paper_id);
+        Ok(newly_registered_count)
     }
 
     // JP scanning and occurrences (non-blocking best-effort)

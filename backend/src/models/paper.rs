@@ -19,6 +19,8 @@ pub struct Paper {
     pub scan_jp_last_run_at: Option<DateTime<Utc>>,
     pub definitions_last_run_at: Option<DateTime<Utc>>,
     pub definitions_result_state: Option<String>,
+    // Terms extraction count (migration 006)
+    pub terms_jp_extracted_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type)]
@@ -197,15 +199,16 @@ impl Paper {
         Ok(())
     }
 
-    /// Update terms_jp pipeline timestamp
-    pub async fn update_terms_jp_run_at(pool: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
+    /// Update terms_jp pipeline timestamp and extracted count
+    pub async fn update_terms_jp_run_at(pool: &SqlitePool, id: &str, extracted_count: i64) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            UPDATE papers SET terms_jp_last_run_at = ?, updated_at = ?
+            UPDATE papers SET terms_jp_last_run_at = ?, terms_jp_extracted_count = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
         .bind(Utc::now())
+        .bind(extracted_count)
         .bind(Utc::now())
         .bind(id)
         .execute(pool)

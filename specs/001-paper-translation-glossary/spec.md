@@ -147,6 +147,7 @@ A researcher wants to review all extracted terms in a dedicated glossary view, s
 - **FR-027**: System MUST complete successfully with status `completed_empty` if 0 terms are extracted (not treat as failure)
 - **FR-028**: System MUST return HTTP 202 Accepted when term extraction pipeline is triggered
 - **FR-029**: System MUST prevent term extraction if translation is not complete (return HTTP 409 Conflict or 412 Precondition Failed)
+- **FR-029.5**: System MUST store the count of newly extracted terms in `papers.terms_jp_extracted_count` column after Pipeline B completes, representing the number of unique terms registered to the global dictionary from this paper's translation
 
 #### Pipeline C: Japanese Mechanical Scanning
 
@@ -185,6 +186,10 @@ A researcher wants to review all extracted terms in a dedicated glossary view, s
 
 - **FR-054**: System MUST provide `GET /papers/{id}/status` endpoint returning detailed status for all pipelines
 - **FR-055**: Status response MUST include for each pipeline: total count, completed count, failed count, last run timestamp, and current status (idle | processing | completed | completed_empty | failed)
+  - **Pipeline A (Translation)**: total_chunks, completed_chunks, failed_chunks, status
+  - **Pipeline B (Extract Terms JP)**: extracted_terms_count (from `papers.terms_jp_extracted_count`), last_run_at, status
+  - **Pipeline C (Scan JP)**: total_occurrences (from occurrences table where method='jp-scan'), last_run_at, status
+  - **Pipeline D (Generate Definitions)**: generated (definitions with occurrences in this paper), failed, last_run_at, status, result_state
 - **FR-056**: System MUST display granular progress indicators in the UI during paper processing (translation, term extraction, scanning, definitions) with percentage completion
 - **FR-057**: System MUST allow users to retry failed processing steps independently without reprocessing successful steps
 - **FR-058**: System MUST preserve all partial results when errors occur to prevent data loss
@@ -218,7 +223,7 @@ A researcher wants to review all extracted terms in a dedicated glossary view, s
 
 ### Key Entities *(include if feature involves data)*
 
-- **Paper**: Represents a single imported scientific paper. Key attributes: unique identifier, title, source URL, file path to stored PDF, processing status (pending/processing/completed/failed), import timestamp, pipeline execution timestamps (translation_last_run_at, terms_jp_last_run_at, scan_jp_last_run_at, definitions_last_run_at), definition result state. Relationships: contains multiple Chunks; terms from this paper have Occurrences linked to it.
+- **Paper**: Represents a single imported scientific paper. Key attributes: unique identifier, title, source URL, file path to stored PDF, processing status (pending/processing/completed/failed), import timestamp, pipeline execution timestamps (translation_last_run_at, terms_jp_last_run_at, scan_jp_last_run_at, definitions_last_run_at), definition result state, terms_jp_extracted_count (number of unique terms extracted from this paper by Pipeline B). Relationships: contains multiple Chunks; terms from this paper have Occurrences linked to it.
 
 - **Chunk**: A segment of extracted text from a paper for translation purposes. Key attributes: unique identifier, parent paper reference, sequential index, source text (English), translated HTML/text (Japanese), content hash for caching, processing status (pending/translated/failed), retry count, error message. Relationships: belongs to one Paper; may contain multiple Term Occurrences.
 

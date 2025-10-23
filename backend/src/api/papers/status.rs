@@ -17,7 +17,7 @@ pub struct TranslationProgress {
 
 #[derive(Debug, Serialize)]
 pub struct TermsJpProgress {
-    pub total_terms: i64,
+    pub extracted_terms_count: i64,
     pub last_run_at: Option<String>,
     pub status: String,
 }
@@ -89,16 +89,8 @@ pub async fn get_paper_status(
         "idle"
     };
 
-    // Terms JP progress (scoped to this paper: distinct terms with occurrences)
-    let total_terms: i64 = sqlx::query_scalar(
-        r#"
-        SELECT COUNT(DISTINCT term_id) FROM occurrences WHERE paper_id = ?
-        "#,
-    )
-    .bind(&paper_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap_or(0);
+    // Terms JP progress (newly extracted terms count from Pipeline B)
+    let extracted_terms_count = paper.terms_jp_extracted_count;
 
     let terms_jp_status = if active_pipeline.as_deref() == Some("extract-terms-jp") {
         "processing"
@@ -158,7 +150,7 @@ pub async fn get_paper_status(
             status: translation_status.to_string(),
         },
         terms_jp: TermsJpProgress {
-            total_terms,
+            extracted_terms_count,
             last_run_at: paper.terms_jp_last_run_at.map(|t| t.to_rfc3339()),
             status: terms_jp_status.to_string(),
         },

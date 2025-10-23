@@ -167,7 +167,7 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
             {statusData?.terms_jp ? (
               <>
                 <div>
-                  Terms: <strong style={{ color: '#4caf50' }}>{statusData.terms_jp.total_terms}</strong>
+                  Terms: <strong style={{ color: '#4caf50' }}>{statusData.terms_jp.extracted_terms_count}</strong>
                 </div>
                 {statusData.translation.status !== 'completed' && (
                   <div style={{ marginTop: '0.5rem', color: '#ff9800', fontSize: '0.75rem' }}>

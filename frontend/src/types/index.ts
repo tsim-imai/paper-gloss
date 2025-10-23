@@ -124,7 +124,7 @@ export interface TranslationProgress {
 }
 
 export interface TermsJpProgress {
-  total_terms: number
+  extracted_terms_count: number
   last_run_at?: string
   status: PipelineStatus
 }

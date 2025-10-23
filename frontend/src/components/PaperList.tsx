@@ -57,7 +57,7 @@ export default function PaperList() {
     <div>
       {/* Status filter */}
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <span style={{ alignSelf: 'center', marginRight: '0.5rem', fontWeight: 'bold' }}>
+        <span style={{ alignSelf: 'center', marginRight: '0.5rem', fontWeight: 'bold', color: '#e0e0e0' }}>
           Filter:
         </span>
         {(['all', 'pending', 'processing', 'completed', 'failed'] as const).map((status) => (
@@ -69,8 +69,8 @@ export default function PaperList() {
             }}
             style={{
               padding: '0.5rem 1rem',
-              backgroundColor: statusFilter === status ? '#646cff' : '#e0e0e0',
-              color: statusFilter === status ? 'white' : 'black',
+              backgroundColor: statusFilter === status ? '#646cff' : '#444',
+              color: statusFilter === status ? 'white' : '#999',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -87,9 +87,10 @@ export default function PaperList() {
         <div style={{
           padding: '2rem',
           textAlign: 'center',
-          border: '1px dashed #ccc',
+          border: '1px dashed #444',
           borderRadius: '8px',
-          color: '#666'
+          color: '#999',
+          backgroundColor: '#2a2a2a'
         }}>
           No papers found. Import a paper to get started!
         </div>
@@ -102,36 +103,38 @@ export default function PaperList() {
               style={{
                 textDecoration: 'none',
                 color: 'inherit',
-                border: '1px solid #ccc',
+                border: '1px solid #444',
                 borderRadius: '8px',
                 padding: '1rem',
-                backgroundColor: '#f9f9f9',
+                backgroundColor: '#2a2a2a',
                 transition: 'box-shadow 0.2s',
                 display: 'block',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(100, 108, 255, 0.3)'
+                e.currentTarget.style.borderColor = '#646cff'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow = 'none'
+                e.currentTarget.style.borderColor = '#444'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                 <div style={{ flex: 1 }}>
-                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem' }}>
+                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', color: '#e0e0e0' }}>
                     {paper.title}
                   </h3>
                   {paper.arxiv_id && (
-                    <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.875rem', color: '#999', marginBottom: '0.5rem' }}>
                       arXiv: {paper.arxiv_id}
                     </div>
                   )}
-                  <div style={{ fontSize: '0.875rem', color: '#666' }}>
+                  <div style={{ fontSize: '0.875rem', color: '#999' }}>
                     Source: {paper.source === 'upload' ? 'Upload' : 'URL'} •
                     Created: {new Date(paper.created_at).toLocaleDateString()}
                   </div>
                   {paper.total_chunks !== undefined && (
-                    <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.5rem' }}>
+                    <div style={{ fontSize: '0.875rem', color: '#999', marginTop: '0.5rem' }}>
                       Progress: {paper.translated_chunks || 0} / {paper.total_chunks} chunks translated
                       {paper.failed_chunks ? ` (${paper.failed_chunks} failed)` : ''}
                     </div>
@@ -171,8 +174,8 @@ export default function PaperList() {
             disabled={page === 1}
             style={{
               padding: '0.5rem 1rem',
-              backgroundColor: page === 1 ? '#ccc' : '#646cff',
-              color: 'white',
+              backgroundColor: page === 1 ? '#444' : '#646cff',
+              color: page === 1 ? '#666' : 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: page === 1 ? 'not-allowed' : 'pointer',
@@ -180,7 +183,7 @@ export default function PaperList() {
           >
             Previous
           </button>
-          <span>
+          <span style={{ color: '#e0e0e0' }}>
             Page {page} of {totalPages}
           </span>
           <button
@@ -188,8 +191,8 @@ export default function PaperList() {
             disabled={page === totalPages}
             style={{
               padding: '0.5rem 1rem',
-              backgroundColor: page === totalPages ? '#ccc' : '#646cff',
-              color: 'white',
+              backgroundColor: page === totalPages ? '#444' : '#646cff',
+              color: page === totalPages ? '#666' : 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: page === totalPages ? 'not-allowed' : 'pointer',
