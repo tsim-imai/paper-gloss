@@ -27,11 +27,9 @@ impl TranslationService {
     /// Translate a text chunk to Japanese with retry logic (FR-015: exponential backoff)
     pub async fn translate_chunk(&self, source_text: &str, max_retries: usize) -> Result<TranslationResult> {
         let start = Instant::now();
-        let mut retry_count = 0;
         let mut last_error = None;
 
         for attempt in 0..=max_retries {
-            retry_count = attempt;
 
             match self.llm_client.translate(source_text).await {
                 Ok(translated) => {
@@ -40,7 +38,7 @@ impl TranslationService {
                     return Ok(TranslationResult {
                         translated_text: final_text,
                         duration: start.elapsed(),
-                        retry_count,
+                        retry_count: attempt,
                     });
                 }
                 Err(e) => {
@@ -78,6 +76,7 @@ impl TranslationService {
 
     /// Translate a TAGGED text chunk (with sentinel tags) to Japanese.
     /// Tags must be preserved exactly; only the inner text is translated.
+    #[cfg(feature = "tagged-translation")]
     pub async fn translate_tagged_chunk(&self, tagged_source_text: &str, max_retries: usize) -> Result<TranslationResult> {
         use crate::services::llm::Message;
         let start = Instant::now();
@@ -110,6 +109,7 @@ impl TranslationService {
     }
 
     /// Batch translate tagged chunks with concurrency control
+    #[cfg(feature = "tagged-translation")]
     pub async fn translate_tagged_chunks(&self, chunks: Vec<String>) -> Vec<Result<TranslationResult>> {
         use futures::stream::{self, StreamExt};
         let conc: usize = std::env::var("AI_MAX_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(5);

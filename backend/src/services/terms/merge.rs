@@ -124,6 +124,7 @@ impl TermMergeService {
     /// Preview merge impact without executing
     ///
     /// Returns (variants_to_transfer, occurrences_to_transfer, has_definition_conflict)
+    #[cfg(feature = "term-tools")]
     pub async fn preview_merge(
         &self,
         source_id: &str,

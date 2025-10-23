@@ -129,7 +129,6 @@ impl TextChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use regex::Regex;
 
     #[test]
     fn test_chunk_small_text() {

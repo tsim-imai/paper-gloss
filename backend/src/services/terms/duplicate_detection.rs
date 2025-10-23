@@ -99,6 +99,7 @@ impl DuplicateDetectionService {
     }
 
     /// Check if two specific terms are duplicates
+    #[cfg(feature = "term-tools")]
     pub async fn are_duplicates(&self, term1_id: &str, term2_id: &str) -> Result<bool> {
         let term1 = Term::find_by_id(&self.pool, term1_id).await?;
         let term2 = Term::find_by_id(&self.pool, term2_id).await?;

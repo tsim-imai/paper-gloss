@@ -153,22 +153,19 @@ impl PdfExtractor {
 
                 // Try to determine the type of failure
                 let mut warnings = vec![format!("PDF extraction failed: {}", e)];
-                let mut is_partial = false;
 
                 // Check if file is corrupted but we can extract something
                 if let Ok(partial_text) = extract_text(file_path) {
                     if !partial_text.trim().is_empty() {
                         warn!("Partial extraction successful despite errors");
                         warnings.push("Partial content extracted, some pages may be missing".to_string());
-                        is_partial = true;
-
                         let estimated_pages = partial_text.lines().count() / 50;
                         return Ok(ExtractionResult {
                             text: partial_text,
                             page_count: estimated_pages.max(1),
                             failed_pages: vec![],  // We don't know which specific pages failed
                             warnings,
-                            is_partial,
+                            is_partial: true,
                         });
                     }
                 }

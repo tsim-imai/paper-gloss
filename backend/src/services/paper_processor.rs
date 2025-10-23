@@ -177,6 +177,7 @@ impl PaperProcessor {
                             .ok();
 
                         debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
+                        debug!("LLM retries used for chunk {}: {}", chunk.index, translation_result.retry_count);
                         // Recalculate and update paper status immediately
                         let _ = self.recalc_paper_status(paper_id).await;
                     }
@@ -444,21 +445,22 @@ impl PaperProcessor {
                         .ok();
 
                     debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
+                    debug!("LLM retries used for chunk {}: {}", chunk.index, translation_result.retry_count);
                 }
                 Err(e) => {
                     warn!("Translation failed for chunk {}: {}", chunk.index, e);
 
                     Chunk::update_status(&self.pool, &chunk.id, "failed", Some(e.to_string())).await.ok();
 
-                    llm_logger
-                        .log_translation(
-                            &chunk.id,
-                            &chunk.src_text,
-                            None,
-                            Some(e.to_string()),
-                            0,
-                        )
-                        .ok();
+                        llm_logger
+                            .log_translation(
+                                &chunk.id,
+                                &chunk.src_text,
+                                None,
+                                Some(e.to_string()),
+                                0,
+                            )
+                            .ok();
                 }
             }
         }
