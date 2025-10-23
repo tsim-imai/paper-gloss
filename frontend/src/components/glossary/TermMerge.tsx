@@ -79,20 +79,21 @@ export default function TermMerge({ onClose }: TermMergeProps) {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
       }}>
         <div style={{
-          backgroundColor: 'white',
+          backgroundColor: '#2a2a2a',
           borderRadius: '8px',
           padding: '2rem',
           maxWidth: '800px',
           width: '90%',
+          border: '1px solid #444',
         }}>
-          <p>Detecting duplicates...</p>
+          <p style={{ color: '#e0e0e0', margin: 0 }}>Detecting duplicates...</p>
         </div>
       </div>
     )
@@ -106,7 +107,7 @@ export default function TermMerge({ onClose }: TermMergeProps) {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -116,18 +117,19 @@ export default function TermMerge({ onClose }: TermMergeProps) {
     >
       <div
         style={{
-          backgroundColor: 'white',
+          backgroundColor: '#2a2a2a',
           borderRadius: '8px',
           padding: '2rem',
           maxWidth: '800px',
           width: '90%',
           maxHeight: '80vh',
           overflow: 'auto',
+          border: '1px solid #444',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2 style={{ margin: 0 }}>Merge Duplicate Terms</h2>
+          <h2 style={{ margin: 0, color: '#e0e0e0' }}>Merge Duplicate Terms</h2>
           <button
             onClick={onClose}
             style={{
@@ -135,7 +137,7 @@ export default function TermMerge({ onClose }: TermMergeProps) {
               border: 'none',
               fontSize: '1.5rem',
               cursor: 'pointer',
-              color: '#666',
+              color: '#999',
             }}
           >
             ×
@@ -146,16 +148,17 @@ export default function TermMerge({ onClose }: TermMergeProps) {
           <div style={{
             textAlign: 'center',
             padding: '2rem',
-            color: '#666',
-            border: '1px dashed #ccc',
+            color: '#999',
+            border: '1px dashed #444',
             borderRadius: '8px',
+            backgroundColor: '#1a1a1a',
           }}>
             No duplicate terms detected. All terms are unique!
           </div>
         ) : (
           <>
             <div style={{ marginBottom: '1.5rem' }}>
-              <p style={{ color: '#666', fontSize: '0.875rem' }}>
+              <p style={{ color: '#999', fontSize: '0.875rem', margin: 0 }}>
                 Found {duplicates.length} potential duplicate pair{duplicates.length !== 1 ? 's' : ''}.
                 Select a pair to merge.
               </p>
@@ -167,34 +170,35 @@ export default function TermMerge({ onClose }: TermMergeProps) {
                 <div
                   key={index}
                   style={{
-                    border: selectedPair === pair ? '2px solid #646cff' : '1px solid #ccc',
+                    border: selectedPair === pair ? '2px solid #646cff' : '1px solid #444',
                     borderRadius: '8px',
                     padding: '1rem',
                     cursor: 'pointer',
-                    backgroundColor: selectedPair === pair ? '#f0f0ff' : 'white',
+                    backgroundColor: selectedPair === pair ? '#1e2a4a' : '#1a1a1a',
+                    transition: 'all 0.2s ease',
                   }}
                   onClick={() => setSelectedPair(pair)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.5rem' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                      <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: '#e0e0e0' }}>
                         {pair.term1.lemma_ja} vs {pair.term2.lemma_ja}
                       </div>
-                      <div style={{ fontSize: '0.875rem', color: '#666' }}>
+                      <div style={{ fontSize: '0.875rem', color: '#999' }}>
                         {pair.term1.lemma_en} vs {pair.term2.lemma_en}
                       </div>
                     </div>
                     <div style={{
                       padding: '0.25rem 0.5rem',
-                      backgroundColor: '#e3f2fd',
+                      backgroundColor: '#1e3a5f',
                       borderRadius: '4px',
                       fontSize: '0.75rem',
-                      color: '#1976d2',
+                      color: '#64b5f6',
                     }}>
                       {Math.round(pair.similarity_score * 100)}% similar
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#999' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#666' }}>
                     {pair.reason}
                   </div>
                 </div>
@@ -204,22 +208,22 @@ export default function TermMerge({ onClose }: TermMergeProps) {
             {/* Merge controls */}
             {selectedPair && (
               <div style={{
-                border: '1px solid #ccc',
+                border: '1px solid #444',
                 borderRadius: '8px',
                 padding: '1.5rem',
-                backgroundColor: '#f9f9f9',
+                backgroundColor: '#1a1a1a',
               }}>
-                <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Select term to keep:</h3>
+                <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#e0e0e0' }}>Select term to keep:</h3>
 
                 <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
                   {/* Option 1 */}
                   <label style={{
                     flex: 1,
-                    border: keepTerm === 'term1' ? '2px solid #646cff' : '1px solid #ccc',
+                    border: keepTerm === 'term1' ? '2px solid #646cff' : '1px solid #444',
                     borderRadius: '8px',
                     padding: '1rem',
                     cursor: 'pointer',
-                    backgroundColor: keepTerm === 'term1' ? '#f0f0ff' : 'white',
+                    backgroundColor: keepTerm === 'term1' ? '#1e2a4a' : '#2a2a2a',
                   }}>
                     <input
                       type="radio"
@@ -230,11 +234,11 @@ export default function TermMerge({ onClose }: TermMergeProps) {
                       style={{ marginRight: '0.5rem' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                      <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: '#e0e0e0' }}>
                         {selectedPair.term1.lemma_ja}
                         {selectedPair.term1.reading_kana && ` (${selectedPair.term1.reading_kana})`}
                       </div>
-                      <div style={{ fontSize: '0.875rem', color: '#666' }}>
+                      <div style={{ fontSize: '0.875rem', color: '#999' }}>
                         {selectedPair.term1.lemma_en}
                       </div>
                     </div>
@@ -243,11 +247,11 @@ export default function TermMerge({ onClose }: TermMergeProps) {
                   {/* Option 2 */}
                   <label style={{
                     flex: 1,
-                    border: keepTerm === 'term2' ? '2px solid #646cff' : '1px solid #ccc',
+                    border: keepTerm === 'term2' ? '2px solid #646cff' : '1px solid #444',
                     borderRadius: '8px',
                     padding: '1rem',
                     cursor: 'pointer',
-                    backgroundColor: keepTerm === 'term2' ? '#f0f0ff' : 'white',
+                    backgroundColor: keepTerm === 'term2' ? '#1e2a4a' : '#2a2a2a',
                   }}>
                     <input
                       type="radio"
@@ -258,11 +262,11 @@ export default function TermMerge({ onClose }: TermMergeProps) {
                       style={{ marginRight: '0.5rem' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                      <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: '#e0e0e0' }}>
                         {selectedPair.term2.lemma_ja}
                         {selectedPair.term2.reading_kana && ` (${selectedPair.term2.reading_kana})`}
                       </div>
-                      <div style={{ fontSize: '0.875rem', color: '#666' }}>
+                      <div style={{ fontSize: '0.875rem', color: '#999' }}>
                         {selectedPair.term2.lemma_en}
                       </div>
                     </div>
@@ -271,11 +275,12 @@ export default function TermMerge({ onClose }: TermMergeProps) {
 
                 <div style={{
                   padding: '0.75rem',
-                  backgroundColor: '#fff3cd',
-                  border: '1px solid #ffc107',
-                  borderRadius: '4px',
+                  backgroundColor: '#3d2a1a',
+                  border: '1px solid #f59e0b',
+                  borderRadius: '6px',
                   marginBottom: '1rem',
                   fontSize: '0.875rem',
+                  color: '#ffd666',
                 }}>
                   ⚠️ The other term will be deleted, and all its variants and occurrences will be transferred to the kept term.
                 </div>
@@ -286,13 +291,13 @@ export default function TermMerge({ onClose }: TermMergeProps) {
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    fontSize: '1rem',
+                    fontSize: '0.875rem',
                     backgroundColor: '#646cff',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     cursor: mergeMutation.isPending ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
+                    fontWeight: '500',
                   }}
                 >
                   {mergeMutation.isPending ? 'Merging...' : 'Merge Terms'}
