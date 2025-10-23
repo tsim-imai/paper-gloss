@@ -20,10 +20,10 @@ async fn t024_integration_pdf_upload_to_translation() {
     let body: serde_json::Value = resp.json().await.unwrap();
     let paper_id = body.get("paper_id").unwrap().as_str().unwrap().to_string();
 
-    // 2) Trigger processing
-    let process_url = format!("{}/papers/{}/process", api(&srv.base_url), paper_id);
-    let resp = client.post(&process_url).send().await.unwrap();
-    assert_eq!(resp.status().as_u16(), 202, "process should return 202");
+    // 2) Trigger translation pipeline (A)
+    let translate_url = format!("{}/papers/{}/translate", api(&srv.base_url), paper_id);
+    let resp = client.post(&translate_url).send().await.unwrap();
+    assert_eq!(resp.status().as_u16(), 202, "translate should return 202");
 
     // 3) Fetch translation (polling simplified)
     let trans_url = format!("{}/papers/{}/translation", api(&srv.base_url), paper_id);

@@ -87,7 +87,8 @@ export default function PipelineCard({
         borderRadius: '8px',
         padding: '1rem',
         backgroundColor: '#2a2a2a',
-        marginBottom: '1rem',
+        flex: 1,
+        minWidth: 0,
       }}
     >
       {/* Header */}

@@ -62,7 +62,6 @@ async fn main() -> Result<()> {
         .route("/api/papers", get(api::papers::list_papers))
         .route("/api/papers/:id", get(api::papers::get_paper).delete(api::papers::delete_paper))
         .route("/api/papers/:id/translation", get(api::papers::get_translation))
-        .route("/api/papers/:id/process", axum::routing::post(api::papers::process_paper))
         .route("/api/papers/:id/status", get(api::papers::get_paper_status))
         .route("/api/papers/:id/file", get(api::papers::get_paper_file))
         // Pipeline endpoints (JP-first architecture)

@@ -19,8 +19,8 @@ async fn t051_integration_term_extraction_to_highlighting() {
     assert_eq!(resp.status().as_u16(), 201);
     let paper_id = resp.json::<serde_json::Value>().await.unwrap()["paper_id"].as_str().unwrap().to_string();
 
-    let process_url = format!("{}/papers/{}/process", api(&srv.base_url), paper_id);
-    let _ = client.post(&process_url).send().await.unwrap();
+    let translate_url = format!("{}/papers/{}/translate", api(&srv.base_url), paper_id);
+    let _ = client.post(&translate_url).send().await.unwrap();
 
     // Terms should be listable and occurrences available
     // 1) search terms (bilingual; normalization handled server-side)

@@ -1,5 +1,6 @@
 use crate::api::error::AppError;
-use crate::models::Paper;
+use crate::models::{Paper, Chunk};
+use crate::services::pdf::{PdfExtractor, TextChunker};
 use axum::{
     extract::{Multipart, State},
     http::{header, HeaderMap, StatusCode},
@@ -9,6 +10,7 @@ use regex::Regex;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::fs;
+use std::path::Path;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -129,7 +131,7 @@ async fn handle_file_upload(
     info!("Saved PDF to {}", file_path);
 
     // Pre-validate PDF extraction capability (FR-005, FR-007)
-    use crate::services::pdf::PdfExtractor;
+    use crate::services::pdf::{PdfExtractor, TextChunker};
     use std::path::Path;
     if let Ok(valid) = PdfExtractor::validate_pdf(Path::new(&file_path)) {
         if !valid {
@@ -146,7 +148,29 @@ async fn handle_file_upload(
             AppError::InternalServerError(format!("Failed to create paper: {}", e))
         })?;
 
-    // Do NOT auto-start processing on import. Paper stays 'pending' until client calls POST /papers/{id}/process`.
+    // Extract + chunk synchronously at import time (no auto-translation)
+    match PdfExtractor::extract_with_recovery(Path::new(&file_path)) {
+        Ok(result) => {
+            if !result.text.trim().is_empty() {
+                let chunker = TextChunker::default();
+                let chunks = chunker.chunk(&result.text);
+                for ch in chunks {
+                    let _ = Chunk::create(
+                        pool,
+                        paper.id.clone(),
+                        ch.index as i32,
+                        ch.text,
+                        ch.content_hash,
+                        ch.token_count.map(|t| t as i32),
+                    ).await;
+                }
+                info!("Prepared chunks at import for paper {}", paper.id);
+            } else {
+                warn!("Extraction returned empty text at import for paper {}", paper.id);
+            }
+        }
+        Err(e) => warn!("Extraction failed at import for {}: {}", paper.id, e),
+    }
 
     // Build Location header
     let mut headers = HeaderMap::new();
@@ -163,7 +187,7 @@ async fn handle_file_upload(
         Json(ImportResponse {
             paper_id: paper.id,
             status: "pending".to_string(),
-            message: "Paper imported successfully. Start with POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
+            message: "Paper imported successfully. Chunks prepared if possible. Next: POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
         }),
     ))
 }
@@ -253,7 +277,29 @@ async fn handle_arxiv_import(
             AppError::InternalServerError(format!("Failed to create paper: {}", e))
         })?;
 
-    // Do NOT auto-start processing on import. Paper stays 'pending' until client calls POST /papers/{id}/process`.
+    // Extract + chunk synchronously at import time (no auto-translation)
+    match PdfExtractor::extract_with_recovery(Path::new(&file_path)) {
+        Ok(result) => {
+            if !result.text.trim().is_empty() {
+                let chunker = TextChunker::default();
+                let chunks = chunker.chunk(&result.text);
+                for ch in chunks {
+                    let _ = Chunk::create(
+                        pool,
+                        paper.id.clone(),
+                        ch.index as i32,
+                        ch.text,
+                        ch.content_hash,
+                        ch.token_count.map(|t| t as i32),
+                    ).await;
+                }
+                info!("Prepared chunks at import for paper {}", paper.id);
+            } else {
+                warn!("Extraction returned empty text at import for paper {}", paper.id);
+            }
+        }
+        Err(e) => warn!("Extraction failed at import for {}: {}", paper.id, e),
+    }
 
     // Build Location header
     let mut headers = HeaderMap::new();
@@ -270,7 +316,7 @@ async fn handle_arxiv_import(
         Json(ImportResponse {
             paper_id: paper.id,
             status: "pending".to_string(),
-            message: "Paper imported successfully. Start with POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
+            message: "Paper imported successfully. Chunks prepared if possible. Next: POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
         }),
     ))
 }

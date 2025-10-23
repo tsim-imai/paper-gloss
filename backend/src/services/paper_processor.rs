@@ -36,12 +36,11 @@ impl PaperProcessor {
         if exists.is_some() {
             anyhow::bail!("Another pipeline is already running for this paper");
         }
-        Ok(())
     }
 
     /// Acquire pipeline lock by inserting a row (paper-scoped, single lock)
     /// If `set_processing` is true, update paper.status to Processing (used only by Pipeline A: translate)
-    async fn acquire_pipeline_lock(&self, paper_id: &str, pipeline: &str, set_processing: bool) -> Result<PaperStatus> {
+    pub async fn acquire_pipeline_lock(&self, paper_id: &str, pipeline: &str, set_processing: bool) -> Result<PaperStatus> {
         use chrono::Utc;
         let paper = Paper::find_by_id(&self.pool, paper_id).await?;
         sqlx::query(
@@ -61,7 +60,7 @@ impl PaperProcessor {
     }
 
     /// Release pipeline lock by deleting the row (no status mutation here)
-    async fn release_pipeline_lock(&self, paper_id: &str, _pipeline: &str, _previous_status: PaperStatus) -> Result<()> {
+    pub async fn release_pipeline_lock(&self, paper_id: &str, _pipeline: &str, _previous_status: PaperStatus) -> Result<()> {
         sqlx::query(
             r#"DELETE FROM pipeline_locks WHERE paper_id = ?"#,
         )
@@ -71,9 +70,11 @@ impl PaperProcessor {
         Ok(())
     }
 
-    /// Process a paper: extract, chunk, and translate
-    pub async fn process_paper(&self, paper_id: &str) -> Result<()> {
-        info!("Starting paper processing: {}", paper_id);
+    // [REMOVED] legacy end-to-end processor
+    #[allow(dead_code)]
+    async fn process_paper(&self, _paper_id: &str) -> Result<()> {
+        anyhow::bail!("process_paper is removed");
+        /*
 
         // Update status to processing
         Paper::update_status(&self.pool, paper_id, PaperStatus::Processing).await?;
@@ -154,108 +155,8 @@ impl PaperProcessor {
             .context("Failed to create chunk")?;
         }
 
-        // Step 5: Translate plain chunks in parallel (FR-014)
-        let llm_logger = LlmLogger::new(paper_id)?;
-        info!("Translating {} chunks in parallel for paper {}", chunks.len(), paper_id);
-        let source_texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
-        let results = self.translation_service.translate_chunks(source_texts).await;
-
-        // Process translation results → render HTML and store occurrences
-        let db_chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
-
-        for (index, result) in results.into_iter().enumerate() {
-            let chunk = &chunks[index];
-            let db_chunk = db_chunks.get(index);
-            
-            if let Some(db_chunk) = db_chunk {
-                match result {
-                    Ok(translation_result) => {
-                        // Store translated plain text
-                        Chunk::update_translation(&self.pool, &db_chunk.id, translation_result.translated_text.clone()).await?;
-
-                        llm_logger
-                            .log_translation(
-                                &db_chunk.id,
-                                &chunk.text,
-                                Some(&translation_result.translated_text),
-                                None,
-                                translation_result.duration.as_millis(),
-                            )
-                            .ok();
-
-                        debug!("Translated chunk {} for paper {}", chunk.index, paper_id);
-                        debug!("LLM retries used for chunk {}: {}", chunk.index, translation_result.retry_count);
-                        // Recalculate and update paper status immediately
-                        let _ = self.recalc_paper_status(paper_id).await;
-                    }
-                    Err(e) => {
-                        warn!("Translation failed for chunk {}: {}", chunk.index, e);
-
-                        // Update chunk status to failed
-                        Chunk::update_status(&self.pool, &db_chunk.id, "failed", Some(e.to_string())).await.ok();
-
-                        // Log failed translation
-                        llm_logger
-                            .log_translation(
-                                &db_chunk.id,
-                                &chunk.text,
-                                None,
-                                Some(e.to_string()),
-                                0,
-                            )
-                            .ok();
-
-                        // Recalculate and update paper status (may become failed if all failed)
-                        let _ = self.recalc_paper_status(paper_id).await;
-                        // FR-033: Preserve partial results - continue processing other chunks
-                    }
-                }
-            }
-        }
-
-        // Check if any chunks were successfully translated
-        let translated_count = Chunk::count_translated_by_paper_id(&self.pool, paper_id).await?;
-        let total_count = Chunk::count_by_paper_id(&self.pool, paper_id).await?;
-
-        if translated_count == 0 {
-            warn!("No chunks were successfully translated for paper {}", paper_id);
-            Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await?;
-            return Ok(());
-        }
-
-        // Step 6: Extract JP terms (with lemma_en) and register
-        info!("Extracting JP terms for paper {}", paper_id);
-        if let Err(e) = self.extract_jp_terms_and_register(paper_id).await {
-            warn!("JP term extraction failed for paper {}: {}", paper_id, e);
-        }
-
-        // Step 7: Scan JP occurrences and store (non-blocking)
-        info!("Scanning JP occurrences for paper {}", paper_id);
-        if let Err(e) = self.scan_jp_occurrences(paper_id).await {
-            warn!("JP occurrence scanning failed for paper {}: {}", paper_id, e);
-        }
-
-        // Step 8: Generate definitions for extracted terms (optional)
-        info!("Generating definitions for paper {}", paper_id);
-        if let Err(e) = self.generate_definitions(paper_id).await {
-            warn!("Definition generation failed for paper {}: {}", paper_id, e);
-            // Continue anyway - definitions can be generated later
-        }
-
-        // Update final status based on translation completion
-        if translated_count < total_count {
-            warn!(
-                "Partial translation: {}/{} chunks for paper {}",
-                translated_count, total_count, paper_id
-            );
-            // Keep status as Processing (partial completion)
-            // User can retry failed chunks
-        } else {
-            info!("Successfully processed paper {}", paper_id);
-            Paper::update_status(&self.pool, paper_id, PaperStatus::Completed).await?;
-        }
-
-        Ok(())
+        */
+        anyhow::bail!("process_paper is removed")
     }
 
     // Old English-based extraction and tracking functions removed in JP-first flow
@@ -421,6 +322,21 @@ impl PaperProcessor {
         result
     }
 
+    /// Pipeline A (no-lock wrapper for API-managed locking)
+    pub async fn translate_paper_no_lock(&self, paper_id: &str) -> Result<()> {
+        let result = self.translate_paper_internal(paper_id).await;
+        match &result {
+            Ok(_) => {
+                let _ = Paper::update_translation_run_at(&self.pool, paper_id).await;
+                let _ = self.recalc_paper_status(paper_id).await;
+            }
+            Err(_) => {
+                let _ = Paper::update_status(&self.pool, paper_id, PaperStatus::Failed).await;
+            }
+        }
+        result
+    }
+
     async fn translate_paper_internal(&self, paper_id: &str) -> Result<()> {
         use futures::stream::{self, StreamExt};
 
@@ -564,6 +480,15 @@ impl PaperProcessor {
         result
     }
 
+    /// Pipeline B (no-lock wrapper for API-managed locking)
+    pub async fn extract_terms_jp_no_lock(&self, paper_id: &str) -> Result<()> {
+        let result = self.extract_jp_terms_and_register(paper_id).await;
+        if result.is_ok() {
+            let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id).await;
+        }
+        result
+    }
+
     /// Pipeline C: Scan Japanese text for term occurrences
     pub async fn scan_jp(&self, paper_id: &str) -> Result<()> {
         info!("Pipeline C: Starting JP occurrence scanning for paper {}", paper_id);
@@ -582,6 +507,15 @@ impl PaperProcessor {
         // Release lock
         self.release_pipeline_lock(paper_id, "scan-jp", prev_status).await.ok();
 
+        result
+    }
+
+    /// Pipeline C (no-lock wrapper for API-managed locking)
+    pub async fn scan_jp_no_lock(&self, paper_id: &str) -> Result<()> {
+        let result = self.scan_jp_occurrences(paper_id).await;
+        if result.is_ok() {
+            let _ = Paper::update_scan_jp_run_at(&self.pool, paper_id).await;
+        }
         result
     }
 
@@ -618,19 +552,90 @@ impl PaperProcessor {
 
         result.map(|_| ())
     }
+
+    /// Pipeline D (no-lock wrapper for API-managed locking)
+    pub async fn generate_definitions_pipeline_no_lock(&self, paper_id: &str) -> Result<()> {
+        let result = self.generate_definitions(paper_id).await;
+        match &result {
+            Ok((success_count, error_count)) => {
+                let result_state = if *success_count > 0 {
+                    "completed_nonempty"
+                } else if *error_count == 0 {
+                    "completed_empty"
+                } else {
+                    "failed"
+                };
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, result_state).await;
+            }
+            Err(_) => {
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, "failed").await;
+            }
+        }
+        result.map(|_| ())
+    }
 }
 
 impl PaperProcessor {
     // JP term extraction + registration
     async fn extract_jp_terms_and_register(&self, paper_id: &str) -> Result<()> {
         use crate::models::{Term, TermVariant};
+        use futures::stream::{self, StreamExt};
+
         let extractor = JapaneseTermExtractor::new(self.llm_client.clone());
         let chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
-        let mut buf = String::new();
-        for c in &chunks { if let Some(t) = &c.trans_html { buf.push_str(t); buf.push_str("\n\n"); } }
-        if buf.trim().is_empty() { return Ok(()); }
 
-        let mut terms = extractor.extract_from_text(&buf, Some(4000)).await.unwrap_or_default();
+        if chunks.is_empty() {
+            warn!("No chunks found for paper {} - cannot extract terms", paper_id);
+            return Ok(());
+        }
+
+        info!("Extracting JP terms from {} chunks in parallel for paper {}", chunks.len(), paper_id);
+
+        let conc: usize = std::env::var("AI_MAX_CONCURRENCY")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5);
+
+        // Process each chunk in parallel
+        let stream = stream::iter(chunks)
+            .filter_map(|chunk| async move {
+                if let Some(trans_text) = chunk.trans_html {
+                    if !trans_text.trim().is_empty() {
+                        return Some((chunk.index, trans_text));
+                    }
+                }
+                None
+            })
+            .map(|(index, trans_text)| {
+                let ext = extractor.clone();
+                async move {
+                    let result = ext.extract_from_text(&trans_text, Some(4000)).await;
+                    (index, trans_text, result)
+                }
+            })
+            .buffer_unordered(conc);
+
+        tokio::pin!(stream);
+
+        let mut all_terms = Vec::new();
+
+        while let Some((index, trans_text, result)) = stream.next().await {
+            match result {
+                Ok(terms) => {
+                    let preview: String = trans_text.chars().take(100).collect();
+                    info!("Extracted {} terms from chunk {}: {}", terms.len(), index, preview);
+                    all_terms.extend(terms);
+                }
+                Err(e) => {
+                    let preview: String = trans_text.chars().take(100).collect();
+                    warn!("Term extraction failed for chunk {}: {} - text: {}", index, e, preview);
+                }
+            }
+        }
+
+        info!("Total extracted {} terms from all chunks for paper {}", all_terms.len(), paper_id);
+
+        let mut terms = all_terms;
 
         // Deduplicate by normalized JA
         use crate::services::terms::normalize_japanese;

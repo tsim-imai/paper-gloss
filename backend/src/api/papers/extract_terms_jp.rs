@@ -1,5 +1,5 @@
 use crate::api::error::AppError;
-use crate::models::Paper;
+use crate::models::{Paper, PaperStatus};
 use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 use crate::services::PaperProcessor;
@@ -30,35 +30,37 @@ pub async fn extract_terms_jp(
             _ => AppError::InternalServerError(format!("Database error: {}", e)),
         })?;
 
-    // If another pipeline is running, return 409 Conflict
-    let lock_exists: Option<i64> = sqlx::query_scalar(
-        r#"SELECT 1 FROM pipeline_locks WHERE paper_id = ? LIMIT 1"#,
-    )
-    .bind(&paper_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| AppError::InternalServerError(format!("Database error: {}", e)))?;
+    // Try to acquire lock atomically; on conflict return 409
+    let processor = PaperProcessor::new(pool.clone())
+        .map_err(|e| AppError::InternalServerError(format!("Failed to init processor: {}", e)))?;
+    let prev_status: PaperStatus = match processor.acquire_pipeline_lock(&paper_id, "extract-terms-jp", false).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("Lock acquire failed for extract-terms-jp {}: {}", paper_id, e);
+            return Err(AppError::Conflict(format!(
+                "Another pipeline is already running for paper {}",
+                paper_id
+            )));
+        }
+    };
 
-    if lock_exists.is_some() {
-        return Err(AppError::Conflict(format!(
-            "Another pipeline is already running for paper {}",
-            paper_id
-        )));
-    }
-
-    // Trigger async term extraction
+    // Trigger async term extraction (no-lock path)
     let pool_clone = pool.clone();
     let paper_id_clone = paper_id.clone();
+    let prev_status_clone = prev_status.clone();
     tokio::spawn(async move {
         let processor = match PaperProcessor::new(pool_clone.clone()) {
             Ok(p) => p,
             Err(e) => {
                 tracing::error!("Failed to create processor: {}", e);
+                let _ = PaperProcessor::new(pool_clone.clone())
+                    .ok()
+                    .and_then(|p| p.release_pipeline_lock(&paper_id_clone, "extract-terms-jp", prev_status_clone.clone()).now_or_never());
                 return;
             }
         };
 
-        let result = AssertUnwindSafe(async { processor.extract_terms_jp(&paper_id_clone).await })
+        let result = AssertUnwindSafe(async { processor.extract_terms_jp_no_lock(&paper_id_clone).await })
             .catch_unwind()
             .await;
 
@@ -72,6 +74,10 @@ pub async fn extract_terms_jp(
             Err(_) => {
                 tracing::error!("Pipeline B (extract-terms-jp) panicked for paper {}", paper_id_clone);
             }
+        }
+
+        if let Ok(p) = PaperProcessor::new(pool_clone.clone()) {
+            let _ = p.release_pipeline_lock(&paper_id_clone, "extract-terms-jp", prev_status_clone).await;
         }
     });
 

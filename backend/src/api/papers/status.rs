@@ -89,12 +89,13 @@ pub async fn get_paper_status(
         "idle"
     };
 
-    // Terms JP progress
+    // Terms JP progress (scoped to this paper: distinct terms with occurrences)
     let total_terms: i64 = sqlx::query_scalar(
         r#"
-        SELECT COUNT(*) FROM terms
+        SELECT COUNT(DISTINCT term_id) FROM occurrences WHERE paper_id = ?
         "#,
     )
+    .bind(&paper_id)
     .fetch_one(&pool)
     .await
     .unwrap_or(0);

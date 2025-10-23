@@ -31,14 +31,17 @@ impl OccurrenceScannerJa {
             while let Some(pos) = jp_text[start..].find(&surface) {
                 let abs = start + pos;
                 let end = abs + surface.len();
+                // Convert byte offsets to char indices for robust frontend highlighting
+                let start_char = jp_text[..abs].chars().count() as i32;
+                let end_char = jp_text[..end].chars().count() as i32;
                 // create occurrence with method 'jp-scan'
                 let _ = Occurrence::create_ext(
                     &self.pool,
                     &term_id,
                     paper_id,
                     chunk_id,
-                    abs as i32,
-                    end as i32,
+                    start_char,
+                    end_char,
                     Some(&surface),
                     "jp-scan",
                     None,
@@ -50,4 +53,3 @@ impl OccurrenceScannerJa {
         Ok(tracked)
     }
 }
-
