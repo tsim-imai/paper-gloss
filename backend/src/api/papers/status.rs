@@ -36,6 +36,7 @@ pub struct DefinitionsProgress {
     pub last_run_at: Option<String>,
     pub status: String,
     pub result_state: Option<String>,
+    pub prompt_version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -113,20 +114,9 @@ pub async fn get_paper_status(
         "idle"
     };
 
-    // Definitions progress
-    let generated_definitions: i64 = sqlx::query_scalar(
-        r#"
-        SELECT COUNT(DISTINCT d.term_id) FROM definitions d
-        INNER JOIN occurrences o ON d.term_id = o.term_id
-        WHERE o.paper_id = ?
-        "#,
-    )
-    .bind(&paper_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap_or(0);
-
-    let failed_definitions = 0i64; // We don't track individual failures, only overall result_state
+    // Definitions progress (last run counts)
+    let generated_definitions: i64 = paper.definitions_generated_last;
+    let failed_definitions: i64 = paper.definitions_failed_last;
 
     let definitions_status = if active_pipeline.as_deref() == Some("generate-definitions") {
         "processing"
@@ -165,6 +155,7 @@ pub async fn get_paper_status(
             last_run_at: paper.definitions_last_run_at.map(|t| t.to_rfc3339()),
             status: definitions_status.to_string(),
             result_state: paper.definitions_result_state.clone(),
+            prompt_version: paper.definitions_prompt_version.clone(),
         },
     }))
 }

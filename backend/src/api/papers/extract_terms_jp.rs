@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use serde::Deserialize;
 use serde::Serialize;
 use sqlx::SqlitePool;
 
@@ -17,10 +18,17 @@ pub struct ExtractTermsJpResponse {
     pub message: String,
 }
 
-/// POST /papers/{id}/extract-terms-jp - Pipeline B: Extract Japanese terms
+#[derive(Debug, Deserialize)]
+pub struct ExtractTermsJpRequest {
+    pub max_terms: Option<i64>,
+    pub min_confidence: Option<f64>,
+}
+
+/// POST /papers/{id}/extract-terms-jp - Pipeline B: Extract Japanese terms (v2: POSなし、variants/aliases保存)
 pub async fn extract_terms_jp(
     State(pool): State<SqlitePool>,
     Path(paper_id): Path<String>,
+    req: Option<Json<ExtractTermsJpRequest>>,
 ) -> Result<(StatusCode, Json<ExtractTermsJpResponse>), AppError> {
     // Verify paper exists
     let _paper = Paper::find_by_id(&pool, &paper_id)
@@ -48,6 +56,10 @@ pub async fn extract_terms_jp(
     let pool_clone = pool.clone();
     let paper_id_clone = paper_id.clone();
     let prev_status_clone = prev_status.clone();
+    let (max_terms, min_confidence) = match req {
+        Some(Json(r)) => (r.max_terms, r.min_confidence),
+        None => (None, None),
+    };
     tokio::spawn(async move {
         let processor = match PaperProcessor::new(pool_clone.clone()) {
             Ok(p) => p,
@@ -60,7 +72,7 @@ pub async fn extract_terms_jp(
             }
         };
 
-        let result = AssertUnwindSafe(async { processor.extract_terms_jp_no_lock(&paper_id_clone).await })
+        let result = AssertUnwindSafe(async { processor.extract_terms_jp_no_lock(&paper_id_clone, min_confidence, max_terms).await })
             .catch_unwind()
             .await;
 

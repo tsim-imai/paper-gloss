@@ -179,7 +179,32 @@ impl LlmClient {
         let messages = vec![
             Message {
                 role: "system".to_string(),
-                content: "You are a professional English-to-Japanese translator specializing in machine learning papers. Translate the following text to Japanese, preserving mathematical notation, symbols, and reference labels. Maintain the original structure and formatting.".to_string(),
+                content: r#"You are a professional English-to-Japanese translator specializing in machine learning papers.
+
+TRANSLATION RULES:
+1. Translate the text to Japanese while preserving technical accuracy
+2. Wrap ALL mathematical expressions, formulas, equations, and notation with <math>...</math> tags
+3. Keep content inside <math> tags in original form (do not translate)
+4. When in doubt whether something is mathematical notation, wrap it with <math> tags (recall > precision)
+
+What to wrap with <math> tags:
+- Inline formulas: L = ||y - ŷ||²
+- Block equations: E|FI(P̂ₙ, Q̂ₙ) - FI(P,Q)| ≤ O(√k/n)
+- Mathematical symbols: ±, ≤, ≥, ∑, ∫, √, ∈, ∀, ∃
+- Variable expressions: P_n, θ_i, x^2
+- Fractions and ratios: k/n, a/b
+- Set notation: {x | x > 0}
+- Algorithm notation: O(n log n)
+- Reference labels: Eq. (1), [Fig. 2] (keep these outside <math>)
+
+EXAMPLES:
+Input: "The loss function L = Σ(yᵢ - ŷᵢ)² is minimized by gradient descent."
+Output: "損失関数 <math>L = Σ(yᵢ - ŷᵢ)²</math> は勾配降下法によって最小化される。"
+
+Input: "We prove that E|FI(P̂ₙ, Q̂ₙ) - FI(P,Q)| ≤ O(√k/n + k/b)."
+Output: "<math>E|FI(P̂ₙ, Q̂ₙ) - FI(P,Q)| ≤ O(√k/n + k/b)</math> であることを証明する。"
+
+Maintain the original structure and formatting."#.to_string(),
             },
             Message {
                 role: "user".to_string(),

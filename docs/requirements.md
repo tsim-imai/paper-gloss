@@ -60,7 +60,7 @@
   - 失敗ポリシー: LLM致命エラーのみ failed。0件はエラーにしない。
 
 4) 用語管理（辞書登録）
-- Pipeline B の抽出結果（lemma_ja/lemma_en 等）を基に `terms`/`term_variants` に登録。
+- Pipeline B の抽出結果（lemma_ja/lemma_en 等）を基に `terms`/`term_variants`/`term_aliases` に登録（POSは廃止）。
 - `terms.lemma_ja` は訳文内で初出の日本語表記を暫定正規形として採用（後で編集/マージ可能）。
 
 5) 用語解説（LLM）
@@ -146,7 +146,7 @@
 - 翻訳（user の例）:
   - 「次のテキストを日本語に翻訳してください。段落構造は維持してください。」
 - JP用語抽出（system の例）:
-  - 「あなたは日本語論文の用語アノテータです。出力は JSON 配列のみ。各要素は {lemma_ja, lemma_en, reading_kana?, pos?, variants_ja?}。本文を変更・要約しない。スパンは返さない。」
+  - 「あなたは日本語論文の用語アノテータです。出力は JSON 配列のみ。各要素は {lemma_ja, lemma_en, reading_kana?, variants?, aliases?}。本文を変更・要約しない。スパンは返さない。POS は出力しない。」
 - JP用語抽出（user の例）:
   - 「テキスト: ...\n 一般語は除外。重複は統合して代表表記を lemma_ja とする。」
 

@@ -12,8 +12,6 @@ pub struct UpdateTermRequest {
     pub lemma_en: Option<String>,
     pub lemma_ja: Option<String>,
     pub reading_kana: Option<String>,
-    pub pos: Option<String>,
-    pub tags: Option<String>,
     pub note: Option<String>,
 }
 
@@ -44,8 +42,6 @@ pub async fn update_term(
         req.lemma_en,
         req.lemma_ja,
         req.reading_kana,
-        req.pos,
-        req.tags,
         req.note,
     )
     .await

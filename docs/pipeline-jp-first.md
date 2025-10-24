@@ -18,7 +18,7 @@
   - 失敗条件: 入力不正/抽出ゼロ/システム障害で全く進捗がない場合のみ failed（部分成功が1つでもあれば partial 扱い）
 
 - B: Extract Terms (JP, LLM)
-  - POST /api/papers/{id}/extract-terms-jp — 日本語訳から {lemma_ja, lemma_en, reading_kana?, pos?, variants_ja?} を抽出し、辞書へ即登録。
+  - POST /api/papers/{id}/extract-terms-jp — 日本語訳から {lemma_ja, lemma_en, reading_kana?, variants?, aliases?} を抽出し、辞書へ即登録（POSは廃止）。
   - 責務: 日本語訳から辞書を拡充する（登録/重複排除/正規化）。
   - 成功条件:
     - completed_nonempty: 登録件数 > 0
@@ -34,15 +34,15 @@
     - completed_empty: 0件（エラーにしない）
   - 失敗条件: 入力未準備（翻訳未完了）などの前提未満足、DB障害等。
 
-- D: Generate Definitions (LLM)
-  - POST /api/papers/{id}/generate-definitions — 当該論文に関連する用語（通常は C で出現した用語）について日本語の簡潔な定義を生成・保存。
-  - POST /api/terms/{id}/define — 単語単位で定義を再生成/更新（既存エンドポイント）。
-  - 責務: `definitions(lang='ja')` を補完する。paper.status へ影響しない。
+- D: Generate Definitions (LLM, v2 固定)
+  - POST /api/papers/{id}/generate-definitions — 当該論文に関連する用語の定義をJSONスキーマで生成し、summary を保存。中間JSONは artifacts へ追記。
+  - POST /api/terms/{id}/define — 単語単位で定義を再生成/更新（v2）。
+  - 責務: `definitions(lang='ja').text` に summary（2–3文）を保存し、`definition_meta` に品質/由来メタを保存。paper.status へ影響しない。
+  - 出力: summary を `definitions.text` に保存。中間JSON（`docs/pipeline-d-v2.md` 参照）を `artifacts/papers/{id}/definitions.d2.jsonl` に追記。
   - 並列: `AI_MAX_CONCURRENCY`（既定5）。HTTPタイムアウト: `AI_REQUEST_TIMEOUT_SECS`（既定600秒）。
-    - 実装メモ: 現行コードは一時的に上限10で並列化。後続の実装で `AI_MAX_CONCURRENCY` に統一予定。
   - 成功条件:
     - completed_nonempty: 生成件数 > 0
-    - completed_empty: 0件（エラーにしない。C未実行などで関連語が無い場合に発生しうる）
+    - completed_empty: 0件（エラーにしない。C未実行/用語なし等）
   - 失敗条件: LLM致命エラーや前提未満足（論文・用語が存在しない等）。
 
 ---
@@ -58,7 +58,7 @@ GET /api/papers/{id}/status は以下の小節を返す（例）。
   "translation": { "total_chunks": 42, "completed_chunks": 40, "failed_chunks": 2, "status": "processing" },
   "terms_jp":    { "total_terms": 128, "last_run_at": "...", "status": "completed|processing|idle" },
   "scan_jp":     { "total_occurrences": 532, "last_run_at": "...", "status": "completed|processing|idle" },
-  "definitions": { "generated": 57, "failed": 3, "last_run_at": "...", "status": "completed|processing|idle", "result_state": "completed_nonempty|completed_empty|failed" }
+  "definitions": { "generated": 57, "failed": 3, "last_run_at": "...", "status": "completed|processing|idle", "result_state": "completed_nonempty|completed_empty|failed", "prompt_version": "d2" }
 }
 ```
 
@@ -94,8 +94,8 @@ HTTPの推奨:
 ## Prompts (Outline)
 
 - 翻訳: 数式/記号/参照の保持、表現一貫性。
-- JP用語抽出: JSON配列のみ、{lemma_ja, lemma_en, ...}。スパンなし。
-- 定義生成: 日本語で2–3文。専門外でも理解できる簡潔さ。数式や記号は簡略記述、出典不要。出力はプレーンテキストのみ。
+- JP用語抽出: JSON配列のみ、{lemma_ja, lemma_en, reading_kana?, variants?, aliases?}。スパンなし、POSなし。
+- 定義生成（v2）: summary に加え、用例/関連語/タグ/関係/品質メタを JSON（`pipeline-d-v2.md`）で返す。summary はDB保存、JSONは artifacts 併置→後続で正規化。
 
 ---
 

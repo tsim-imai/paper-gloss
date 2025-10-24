@@ -10,11 +10,7 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 #[derive(Debug, Serialize)]
-pub struct GenerateDefinitionResponse {
-    pub term_id: String,
-    pub definition: String,
-    pub message: String,
-}
+pub struct GenerateDefinitionResponse { pub ok: bool, pub prompt_version: String }
 
 /// POST /terms/{id}/define - Generate or regenerate definition for a term
 pub async fn generate_definition(
@@ -36,9 +32,9 @@ pub async fn generate_definition(
     })?;
     let def_generator = DefinitionGenerator::new(llm_client, pool);
 
-    // Generate and store definition
-    let definition = def_generator
-        .generate_and_store(&term.id, &term.lemma_en, &term.lemma_ja, None)
+    // Generate and store definition (v2)
+    def_generator
+        .generate_and_store_v2(None, &term.id, &term.lemma_en, &term.lemma_ja, None)
         .await
         .map_err(|e| {
             // Map LLM generation errors to 503 Service Unavailable
@@ -49,9 +45,5 @@ pub async fn generate_definition(
             }
         })?;
 
-    Ok(Json(GenerateDefinitionResponse {
-        term_id: term.id,
-        definition,
-        message: "Definition generated successfully".to_string(),
-    }))
+    Ok(Json(GenerateDefinitionResponse { ok: true, prompt_version: "d2".into() }))
 }

@@ -12,8 +12,6 @@ pub struct Term {
     pub lemma_en: String,
     pub lemma_ja: String,
     pub reading_kana: Option<String>,
-    pub pos: Option<String>,
-    pub tags: Option<String>,
     pub note: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -27,8 +25,6 @@ impl Term {
         lemma_en: String,
         lemma_ja: String,
         reading_kana: Option<String>,
-        pos: Option<String>,
-        tags: Option<String>,
         note: Option<String>,
     ) -> Result<Self, sqlx::Error> {
         let id = Uuid::new_v4().to_string();
@@ -36,8 +32,8 @@ impl Term {
 
         sqlx::query_as::<_, Term>(
             r#"
-            INSERT INTO terms (id, slug, lemma_en, lemma_ja, reading_kana, pos, tags, note, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO terms (id, slug, lemma_en, lemma_ja, reading_kana, note, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
             "#,
         )
@@ -46,8 +42,6 @@ impl Term {
         .bind(&lemma_en)
         .bind(&lemma_ja)
         .bind(reading_kana)
-        .bind(pos)
-        .bind(tags)
         .bind(note)
         .bind(now)
         .bind(now)
@@ -202,46 +196,28 @@ impl Term {
         lemma_en: Option<String>,
         lemma_ja: Option<String>,
         reading_kana: Option<String>,
-        pos: Option<String>,
-        tags: Option<String>,
         note: Option<String>,
     ) -> Result<(), sqlx::Error> {
-        let mut query = "UPDATE terms SET updated_at = ?".to_string();
-        let mut params: Vec<String> = vec![Utc::now().to_rfc3339()];
-
-        if let Some(val) = lemma_en {
-            query.push_str(", lemma_en = ?");
-            params.push(val);
-        }
-        if let Some(val) = lemma_ja {
-            query.push_str(", lemma_ja = ?");
-            params.push(val);
-        }
-        if let Some(val) = reading_kana {
-            query.push_str(", reading_kana = ?");
-            params.push(val);
-        }
-        if let Some(val) = pos {
-            query.push_str(", pos = ?");
-            params.push(val);
-        }
-        if let Some(val) = tags {
-            query.push_str(", tags = ?");
-            params.push(val);
-        }
-        if let Some(val) = note {
-            query.push_str(", note = ?");
-            params.push(val);
-        }
-
-        query.push_str(" WHERE id = ?");
-        params.push(id.to_string());
-
-        sqlx::query(&query)
-            .bind(&params[0]) // updated_at
-            .bind(id)
-            .execute(pool)
-            .await?;
+        // COALESCE-based static update to avoid dynamic SQL binding issues
+        sqlx::query(
+            r#"
+            UPDATE terms SET
+                lemma_en = COALESCE(?, lemma_en),
+                lemma_ja = COALESCE(?, lemma_ja),
+                reading_kana = COALESCE(?, reading_kana),
+                note = COALESCE(?, note),
+                updated_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(lemma_en)
+        .bind(lemma_ja)
+        .bind(reading_kana)
+        .bind(note)
+        .bind(Utc::now())
+        .bind(id)
+        .execute(pool)
+        .await?;
 
         Ok(())
     }

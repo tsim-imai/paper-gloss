@@ -12,10 +12,7 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 #[derive(Debug, Serialize)]
-pub struct GenerateDefinitionsResponse {
-    pub paper_id: String,
-    pub message: String,
-}
+pub struct GenerateDefinitionsResponse { pub paper_id: String, pub message: String, pub prompt_version: String }
 
 /// POST /papers/{id}/generate-definitions - Pipeline D: Generate term definitions
 pub async fn generate_definitions(
@@ -85,7 +82,8 @@ pub async fn generate_definitions(
         StatusCode::ACCEPTED,
         Json(GenerateDefinitionsResponse {
             paper_id,
-            message: "Definition generation pipeline started. Use GET /papers/{id}/status to check progress.".to_string(),
+            message: "Definition generation (v2) started. Use GET /papers/{id}/status to check progress.".to_string(),
+            prompt_version: "d2".into(),
         }),
     ))
 }

@@ -220,7 +220,7 @@ impl PaperProcessor {
         let def_generator = DefinitionGenerator::new(self.llm_client.clone(), self.pool.clone());
 
         // Get all terms from occurrences in this paper
-        let term_ids: Vec<String> = sqlx::query_scalar(
+        let term_ids_from_occ: Vec<String> = sqlx::query_scalar(
             r#"
             SELECT DISTINCT term_id FROM occurrences
             WHERE paper_id = ?
@@ -229,6 +229,13 @@ impl PaperProcessor {
         .bind(paper_id)
         .fetch_all(&self.pool)
         .await?;
+
+        let term_ids: Vec<String> = if term_ids_from_occ.is_empty() {
+            // fallback: all terms in DB (no occurrences yet)
+            sqlx::query_scalar("SELECT id FROM terms")
+                .fetch_all(&self.pool)
+                .await?
+        } else { term_ids_from_occ };
 
         // Filter terms that don't have definitions yet
         let mut terms_to_generate = Vec::new();
@@ -255,10 +262,11 @@ impl PaperProcessor {
         let results: Vec<_> = stream::iter(terms_to_generate)
             .map(|term| {
                 let generator = def_generator.clone();
+                let pid = paper_id.to_string();
                 async move {
                     let term_name = term.lemma_en.clone();
                     match generator
-                        .generate_and_store(&term.id, &term.lemma_en, &term.lemma_ja, None)
+                        .generate_and_store_v2(Some(&pid), &term.id, &term.lemma_en, &term.lemma_ja, None)
                         .await
                     {
                         Ok(_) => Ok(term_name),
@@ -461,14 +469,14 @@ impl PaperProcessor {
     }
 
     /// Pipeline B: Extract Japanese terms from translated text
-    pub async fn extract_terms_jp(&self, paper_id: &str) -> Result<()> {
+    pub async fn extract_terms_jp(&self, paper_id: &str, min_confidence: Option<f64>, max_terms: Option<i64>) -> Result<()> {
         info!("Pipeline B: Starting JP term extraction for paper {}", paper_id);
 
         // Check lock
         self.check_pipeline_lock(paper_id).await?;
         let prev_status = self.acquire_pipeline_lock(paper_id, "extract-terms-jp", false).await?;
 
-        let result = self.extract_jp_terms_and_register(paper_id).await;
+        let result = self.extract_jp_terms_and_register(paper_id, min_confidence, max_terms).await;
 
         // Update timestamp and count (even on Ok - 0 terms is valid)
         match &result {
@@ -485,8 +493,8 @@ impl PaperProcessor {
     }
 
     /// Pipeline B (no-lock wrapper for API-managed locking)
-    pub async fn extract_terms_jp_no_lock(&self, paper_id: &str) -> Result<()> {
-        let result = self.extract_jp_terms_and_register(paper_id).await;
+    pub async fn extract_terms_jp_no_lock(&self, paper_id: &str, min_confidence: Option<f64>, max_terms: Option<i64>) -> Result<()> {
+        let result = self.extract_jp_terms_and_register(paper_id, min_confidence, max_terms).await;
         match &result {
             Ok(count) => {
                 let _ = Paper::update_terms_jp_run_at(&self.pool, paper_id, *count).await;
@@ -546,11 +554,11 @@ impl PaperProcessor {
                 } else {
                     "failed"
                 };
-                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, result_state).await;
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, result_state, "d2", *success_count as i64, *error_count as i64).await;
             }
             Err(_) => {
                 // On error, mark as failed
-                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, "failed").await;
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, "failed", "d2", 0, 0).await;
             }
         }
 
@@ -572,10 +580,10 @@ impl PaperProcessor {
                 } else {
                     "failed"
                 };
-                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, result_state).await;
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, result_state, "d2", *success_count as i64, *error_count as i64).await;
             }
             Err(_) => {
-                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, "failed").await;
+                let _ = Paper::update_definitions_run_at(&self.pool, paper_id, "failed", "d2", 0, 0).await;
             }
         }
         result.map(|_| ())
@@ -585,8 +593,8 @@ impl PaperProcessor {
 impl PaperProcessor {
     // JP term extraction + registration
     // Returns the count of newly registered terms
-    async fn extract_jp_terms_and_register(&self, paper_id: &str) -> Result<i64> {
-        use crate::models::{Term, TermVariant};
+    async fn extract_jp_terms_and_register(&self, paper_id: &str, min_confidence: Option<f64>, max_terms: Option<i64>) -> Result<i64> {
+        use crate::models::{Term, TermVariant, TermAlias};
         use futures::stream::{self, StreamExt};
 
         let extractor = JapaneseTermExtractor::new(self.llm_client.clone());
@@ -645,6 +653,11 @@ impl PaperProcessor {
 
         let mut terms = all_terms;
 
+        // Filter by min_confidence if provided
+        if let Some(th) = min_confidence {
+            terms.retain(|t| t.confidence.unwrap_or(1.0) >= th);
+        }
+
         // Deduplicate by normalized JA
         use crate::services::terms::normalize_japanese;
         use std::collections::HashSet;
@@ -662,13 +675,19 @@ impl PaperProcessor {
             let mut out = String::with_capacity(s.len());
             for ch in s.chars() { if ch.is_ascii_alphanumeric() { out.push(ch); } else if ch==' '||ch=='_'||ch=='-' { out.push('-'); } }
             while out.contains("--") { out = out.replace("--","-"); }
-            out.trim_matches('-').to_string()
+            let trimmed = out.trim_matches('-').to_string();
+            if trimmed.is_empty() { uuid::Uuid::new_v4().to_string() } else { trimmed }
         }
 
         let mut newly_registered_count = 0i64;
+        let mut added_variants_count = 0i64;
+        let mut added_aliases_count = 0i64;
+
+        // Apply max_terms limit after dedup
+        if let Some(max) = max_terms { if max >= 0 { terms.truncate(max as usize); } }
 
         for t in terms.into_iter() {
-            let slug = slugify_en(&t.lemma_en);
+            let slug = if !t.lemma_en.trim().is_empty() { slugify_en(&t.lemma_en) } else { slugify_en(&t.lemma_ja) };
             let term_id = match Term::find_by_slug(&self.pool, &slug).await {
                 Ok(term) => term.id,
                 Err(_) => {
@@ -678,19 +697,41 @@ impl PaperProcessor {
                         t.lemma_en.clone(),
                         t.lemma_ja.clone(),
                         t.reading_kana.clone(),
-                        t.pos.clone(),
-                        None,
                         None,
                     ).await?;
                     newly_registered_count += 1;
                     term.id
                 }
             };
-            let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), t.lemma_ja.clone()).await;
-            if let Some(vs) = t.variants_ja { for v in vs { let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), v).await; } }
+            // Aliases (collect first; apply min_confidence if present)
+            use std::collections::HashSet;
+            let mut alias_ja: HashSet<String> = HashSet::new();
+            let mut alias_en: HashSet<String> = HashSet::new();
+            if let Some(aliases) = t.aliases.clone() {
+                for a in aliases {
+                    let pass = min_confidence.map(|th| a.confidence.unwrap_or(1.0) >= th).unwrap_or(true);
+                    if !pass { continue; }
+                    if a.lang == "ja" { alias_ja.insert(a.surface.clone()); } else if a.lang == "en" { alias_en.insert(a.surface.clone()); }
+                    if let Ok(_r)= TermAlias::create(&self.pool, term_id.clone(), a.surface, a.lang, a.kind, a.confidence).await { added_aliases_count += 1; }
+                }
+            }
+
+            // Always store lemma as variant for recall (unless it collides with alias)
+            if !alias_ja.contains(&t.lemma_ja) {
+                let _ = TermVariant::create(&self.pool, term_id.clone(), "ja".into(), t.lemma_ja.clone()).await.ok();
+            }
+            if !t.lemma_en.is_empty() && !alias_en.contains(&t.lemma_en) {
+                let _ = TermVariant::create(&self.pool, term_id.clone(), "en".into(), t.lemma_en.clone()).await.ok();
+            }
+
+            // Variants (skip those colliding with aliases)
+            if let Some(vars) = t.variants.clone() {
+                for v in vars.ja { if !alias_ja.contains(&v) { if let Ok(_r)= TermVariant::create(&self.pool, term_id.clone(), "ja".into(), v).await { added_variants_count += 1; } } }
+                for v in vars.en { if !alias_en.contains(&v) { if let Ok(_r)= TermVariant::create(&self.pool, term_id.clone(), "en".into(), v).await { added_variants_count += 1; } } }
+            }
         }
 
-        info!("Pipeline B completed: {} new terms registered for paper {}", newly_registered_count, paper_id);
+        info!("Pipeline B completed: {} new terms, {} variants, {} aliases for paper {}", newly_registered_count, added_variants_count, added_aliases_count, paper_id);
         Ok(newly_registered_count)
     }
 

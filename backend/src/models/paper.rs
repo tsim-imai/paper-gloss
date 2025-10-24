@@ -19,6 +19,9 @@ pub struct Paper {
     pub scan_jp_last_run_at: Option<DateTime<Utc>>,
     pub definitions_last_run_at: Option<DateTime<Utc>>,
     pub definitions_result_state: Option<String>,
+    pub definitions_prompt_version: Option<String>,
+    pub definitions_generated_last: i64,
+    pub definitions_failed_last: i64,
     // Terms extraction count (migration 006)
     pub terms_jp_extracted_count: i64,
 }
@@ -239,15 +242,21 @@ impl Paper {
         pool: &SqlitePool,
         id: &str,
         result_state: &str,
+        prompt_version: &str,
+        generated: i64,
+        failed: i64,
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            UPDATE papers SET definitions_last_run_at = ?, definitions_result_state = ?, updated_at = ?
+            UPDATE papers SET definitions_last_run_at = ?, definitions_result_state = ?, definitions_prompt_version = ?, definitions_generated_last = ?, definitions_failed_last = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
         .bind(Utc::now())
         .bind(result_state)
+        .bind(prompt_version)
+        .bind(generated)
+        .bind(failed)
         .bind(Utc::now())
         .bind(id)
         .execute(pool)

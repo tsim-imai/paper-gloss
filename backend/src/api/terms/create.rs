@@ -10,8 +10,6 @@ pub struct CreateTermRequest {
     pub lemma_en: String,
     pub lemma_ja: String,
     pub reading_kana: Option<String>,
-    pub pos: Option<String>,
-    pub tags: Option<String>,
     pub note: Option<String>,
 }
 
@@ -22,8 +20,6 @@ pub struct CreateTermResponse {
     pub lemma_en: String,
     pub lemma_ja: String,
     pub reading_kana: Option<String>,
-    pub pos: Option<String>,
-    pub tags: Option<String>,
     pub note: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -48,8 +44,6 @@ pub async fn create_term(
         req.lemma_en.clone(),
         req.lemma_ja.clone(),
         req.reading_kana.clone(),
-        req.pos.clone(),
-        req.tags.clone(),
         req.note.clone(),
     )
     .await
@@ -74,8 +68,6 @@ pub async fn create_term(
             lemma_en: term.lemma_en,
             lemma_ja: term.lemma_ja,
             reading_kana: term.reading_kana,
-            pos: term.pos,
-            tags: term.tags,
             note: term.note,
             created_at: term.created_at.to_rfc3339(),
             updated_at: term.updated_at.to_rfc3339(),
