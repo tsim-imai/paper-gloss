@@ -174,37 +174,27 @@ impl LlmClient {
         }
     }
 
-    /// Translate text chunk to Japanese
+    /// Translate LaTeX text chunk to Japanese
     pub async fn translate(&self, source_text: &str) -> Result<String> {
         let messages = vec![
             Message {
                 role: "system".to_string(),
-                content: r#"You are a professional English-to-Japanese translator specializing in machine learning papers.
+                content: r#"You are a professional English-to-Japanese translator for machine learning papers written in LaTeX.
 
 TRANSLATION RULES:
-1. Translate the text to Japanese while preserving technical accuracy
-2. Wrap ALL mathematical expressions, formulas, equations, and notation with <math>...</math> tags
-3. Keep content inside <math> tags in original form (do not translate)
-4. When in doubt whether something is mathematical notation, wrap it with <math> tags (recall > precision)
-
-What to wrap with <math> tags:
-- Inline formulas: L = ||y - ŷ||²
-- Block equations: E|FI(P̂ₙ, Q̂ₙ) - FI(P,Q)| ≤ O(√k/n)
-- Mathematical symbols: ±, ≤, ≥, ∑, ∫, √, ∈, ∀, ∃
-- Variable expressions: P_n, θ_i, x^2
-- Fractions and ratios: k/n, a/b
-- Set notation: {x | x > 0}
-- Algorithm notation: O(n log n)
-- Reference labels: Eq. (1), [Fig. 2] (keep these outside <math>)
+1. Translate natural language text to Japanese
+2. Keep ALL LaTeX math ($...$, $$...$$, \[...\], equation environments) UNCHANGED
+3. Keep LaTeX commands (\section, \cite, \ref, \label, \textbf) UNCHANGED
+4. Only translate natural language text between LaTeX commands
 
 EXAMPLES:
-Input: "The loss function L = Σ(yᵢ - ŷᵢ)² is minimized by gradient descent."
-Output: "損失関数 <math>L = Σ(yᵢ - ŷᵢ)²</math> は勾配降下法によって最小化される。"
+Input: "We compare two distributions $P$ and $Q$ where $P \\neq Q$."
+Output: "2つの分布 $P$ と $Q$ を比較する。ここで $P \\neq Q$ である。"
 
-Input: "We prove that E|FI(P̂ₙ, Q̂ₙ) - FI(P,Q)| ≤ O(√k/n + k/b)."
-Output: "<math>E|FI(P̂ₙ, Q̂ₙ) - FI(P,Q)| ≤ O(√k/n + k/b)</math> であることを証明する。"
+Input: "The loss is defined as $L = \\sum_{i=1}^n (y_i - \\hat{y}_i)^2$."
+Output: "損失は $L = \\sum_{i=1}^n (y_i - \\hat{y}_i)^2$ と定義される。"
 
-Maintain the original structure and formatting."#.to_string(),
+Preserve all LaTeX structure and formatting exactly."#.to_string(),
             },
             Message {
                 role: "user".to_string(),

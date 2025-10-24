@@ -1,18 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { apiClient, queryClient } from '../services/api'
 import { Paper } from '../types'
-import PDFViewer from '../components/PDFViewer'
 import TranslationView from '../components/TranslationView'
 import PipelineStatus from '../components/PipelineStatus'
-
-type ViewMode = 'pdf' | 'translation'
 
 export default function PaperPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [viewMode, setViewMode] = useState<ViewMode>('translation')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const { data: paper, isLoading, error } = useQuery({
@@ -29,28 +25,6 @@ export default function PaperPage() {
       return paper?.status === 'processing' ? 5000 : false
     },
   })
-
-  // Check if translation exists (use different query key to avoid cache collision)
-  const { data: translationCheck } = useQuery({
-    queryKey: ['translation-check', id],
-    queryFn: async () => {
-      if (!id) return null
-      try {
-        const response = await apiClient.getTranslation(id)
-        return response.data
-      } catch {
-        return null
-      }
-    },
-    enabled: !!id,
-  })
-
-  // Auto-switch to PDF if no translation available
-  useEffect(() => {
-    if (translationCheck && Array.isArray(translationCheck.chunks) && translationCheck.chunks.length === 0) {
-      setViewMode('pdf')
-    }
-  }, [translationCheck])
 
   // Delete paper mutation (FR-037, FR-038)
   const deletePaperMutation = useMutation({
@@ -87,9 +61,6 @@ export default function PaperPage() {
   if (!paper) {
     return <div style={{ color: 'red', padding: '1rem' }}>Paper not found</div>
   }
-
-  // Construct file URL for PDF viewer
-  const pdfUrl = `/api/papers/${paper.id}/file`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', gap: '0.75rem' }}>
@@ -229,79 +200,35 @@ export default function PaperPage() {
         </div>
       )}
 
-      {/* Pipeline Status */}
-      <div style={{ flex: '0 0 auto', overflowY: 'auto', maxHeight: '50vh' }}>
-        <PipelineStatus paper={paper} />
-      </div>
-
-      {/* View mode selector */}
-      <div
-        style={{
-          padding: '0.5rem',
+      {/* Main content: Pipeline Status (left) and Translation View (right) */}
+      <div style={{ flex: 1, display: 'flex', gap: '0.75rem', overflow: 'hidden' }}>
+        {/* Pipeline Status - Left sidebar */}
+        <div style={{
+          width: '350px',
+          flexShrink: 0,
+          overflowY: 'auto',
+          border: '1px solid #444',
+          borderRadius: '8px',
           backgroundColor: '#2a2a2a',
-          borderRadius: '8px',
-          border: '1px solid #444',
-          display: 'flex',
-          gap: '0.5rem',
-          alignItems: 'center',
-        }}
-      >
-        <span style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#999', marginRight: '0.25rem' }}>
-          View:
-        </span>
-        <button
-          onClick={() => setViewMode('translation')}
+          padding: '0.75rem'
+        }}>
+          <PipelineStatus paper={paper} />
+        </div>
+
+        {/* Translation View - Right main area */}
+        <div
           style={{
-            padding: '0.375rem 0.75rem',
-            backgroundColor: viewMode === 'translation' ? '#646cff' : '#444',
-            color: viewMode === 'translation' ? 'white' : '#999',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '0.75rem',
+            flex: 1,
+            overflow: 'hidden',
+            border: '1px solid #444',
+            borderRadius: '8px',
+            backgroundColor: '#1a1a1a',
           }}
         >
-          Translation
-        </button>
-        <button
-          onClick={() => setViewMode('pdf')}
-          style={{
-            padding: '0.375rem 0.75rem',
-            backgroundColor: viewMode === 'pdf' ? '#646cff' : '#444',
-            color: viewMode === 'pdf' ? 'white' : '#999',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '0.75rem',
-          }}
-        >
-          PDF
-        </button>
-      </div>
-
-      {/* Content area */}
-      <div
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          border: '1px solid #444',
-          borderRadius: '8px',
-          backgroundColor: '#1a1a1a',
-        }}
-      >
-        {/* PDF Viewer */}
-        {viewMode === 'pdf' && (
-          <div style={{ width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <PDFViewer fileUrl={pdfUrl} />
-          </div>
-        )}
-
-        {/* Translation View */}
-        {viewMode === 'translation' && (
           <div style={{ width: '100%', height: '100%', overflow: 'auto', padding: '1rem', backgroundColor: '#1a1a1a' }}>
             <TranslationView paperId={id} />
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

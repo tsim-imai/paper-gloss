@@ -179,32 +179,51 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
                 borderBottom: '1px solid #444',
               }}
             >
-              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#999' }}>
-                Chunk #{chunk.chunk_index + 1}
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#999' }}>
+                  Chunk #{chunk.chunk_index + 1}
+                </div>
+                {chunk.status === 'pending' && (
+                  <span style={{ fontSize: '0.75rem', color: '#ff9800', fontStyle: 'italic' }}>
+                    Not translated yet
+                  </span>
+                )}
+                {chunk.status === 'translated' && (
+                  <span style={{ fontSize: '0.75rem', color: '#4caf50' }}>
+                    ✓ Translated
+                  </span>
+                )}
+                {chunk.status === 'failed' && (
+                  <span style={{ fontSize: '0.75rem', color: '#f44336' }}>
+                    ✗ Failed (retried {chunk.retry_count} times)
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {chunk.status === 'failed' && (
-                  <>
-                    <span style={{ fontSize: '0.75rem', color: '#f44336' }}>
-                      Failed (retried {chunk.retry_count} times)
-                    </span>
-                    <button
-                      onClick={() => retryMutation.mutate(chunk.id)}
-                      disabled={retryMutation.isPending}
-                      style={{
-                        padding: '0.25rem 0.75rem',
-                        fontSize: '0.75rem',
-                        backgroundColor: '#646cff',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Retry
-                    </button>
-                  </>
-                )}
+                {/* Show translate button for all chunks */}
+                <button
+                  onClick={() => retryMutation.mutate(chunk.id)}
+                  disabled={retryMutation.isPending}
+                  style={{
+                    padding: '0.25rem 0.75rem',
+                    fontSize: '0.75rem',
+                    backgroundColor: chunk.status === 'pending' ? '#ff9800' : '#646cff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: retryMutation.isPending ? 'not-allowed' : 'pointer',
+                    opacity: retryMutation.isPending ? 0.6 : 1,
+                  }}
+                  title={
+                    chunk.status === 'pending'
+                      ? 'Translate this chunk'
+                      : chunk.status === 'failed'
+                      ? 'Retry translation'
+                      : 'Re-translate this chunk'
+                  }
+                >
+                  {chunk.status === 'pending' ? 'Translate' : chunk.status === 'failed' ? 'Retry' : 'Re-translate'}
+                </button>
               </div>
             </div>
 

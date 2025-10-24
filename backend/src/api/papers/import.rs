@@ -1,6 +1,8 @@
 use crate::api::error::AppError;
 use crate::models::{Paper, Chunk};
 use crate::services::pdf::{PdfExtractor, TextChunker};
+use crate::services::arxiv::ArxivDownloader;
+use crate::services::latex::LatexChunker;
 use axum::{
     extract::{Multipart, State},
     http::{header, HeaderMap, StatusCode},
@@ -10,8 +12,8 @@ use regex::Regex;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::fs;
-use std::path::Path;
-use tracing::{debug, info, warn};
+use std::path::{Path, PathBuf};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
@@ -192,7 +194,7 @@ async fn handle_file_upload(
     ))
 }
 
-/// Handle arXiv URL import (data-model.md:326-454)
+/// Handle arXiv URL import - downloads LaTeX source and processes
 async fn handle_arxiv_import(
     pool: &SqlitePool,
     url: String,
@@ -208,66 +210,47 @@ async fn handle_arxiv_import(
         ));
     }
 
-    // Convert /abs/ to /pdf/
-    let pdf_url = url.replace("/abs/", "/pdf/") + ".pdf";
+    // Extract arXiv ID from URL
+    let arxiv_id = ArxivDownloader::extract_arxiv_id(&url)
+        .map_err(|e| AppError::BadRequest(format!("Invalid arXiv URL: {}", e)))?;
 
-    debug!("Downloading PDF from {}", pdf_url);
+    info!("Importing arXiv paper {} ({})", arxiv_id, title);
 
-    // Download PDF with timeout
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|e| AppError::InternalServerError(format!("HTTP client error: {}", e)))?;
-
-    let response = client
-        .get(&pdf_url)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                AppError::GatewayTimeout("arXiv download timed out. Please retry later.".to_string())
-            } else {
-                AppError::UnprocessableEntity(format!("Failed to download PDF: {}", e))
-            }
-        })?;
-
-    if !response.status().is_success() {
-        return Err(AppError::UnprocessableEntity(
-            "PDF not found at arXiv. Verify the paper ID is correct.".to_string(),
-        ));
-    }
-
-    // Check Content-Type
-    if let Some(content_type) = response.headers().get("content-type") {
-        if !content_type.to_str().unwrap_or("").contains("application/pdf") {
-            return Err(AppError::UnprocessableEntity(
-                "Downloaded file is not a valid PDF".to_string(),
-            ));
-        }
-    }
-
-    let pdf_bytes = response.bytes().await.map_err(|e| {
-        AppError::UnprocessableEntity(format!("Failed to read PDF data: {}", e))
-    })?;
-
-    // Check size
-    if pdf_bytes.len() > 100 * 1024 * 1024 {
-        return Err(AppError::UnprocessableEntity(
-            "PDF file too large (max 100 MB)".to_string(),
-        ));
-    }
-
-    // Generate paper ID and save
+    // Generate paper ID and create directory
     let paper_id = Uuid::new_v4().to_string();
-    let file_path = format!("artifacts/papers/{}/source.pdf", paper_id);
+    let paper_dir = PathBuf::from(format!("artifacts/papers/{}", paper_id));
 
-    fs::create_dir_all(format!("artifacts/papers/{}", paper_id))
+    fs::create_dir_all(&paper_dir)
         .map_err(|e| AppError::InternalServerError(format!("Failed to create directory: {}", e)))?;
 
-    fs::write(&file_path, &pdf_bytes)
-        .map_err(|e| AppError::InternalServerError(format!("Failed to write PDF: {}", e)))?;
+    // Download and extract arXiv source
+    let downloader = ArxivDownloader::new(paper_dir.clone())
+        .map_err(|e| AppError::InternalServerError(format!("Failed to create downloader: {}", e)))?;
 
-    info!("Downloaded and saved PDF from arXiv to {}", file_path);
+    let extract_dir = downloader
+        .download_and_extract(&arxiv_id)
+        .await
+        .map_err(|e| {
+            AppError::UnprocessableEntity(format!("Failed to download arXiv source: {}. The paper may not have LaTeX source available.", e))
+        })?;
+
+    info!("Downloaded and extracted arXiv source to {:?}", extract_dir);
+
+    // Find main .tex file
+    let main_tex_path = downloader
+        .find_main_tex(&extract_dir)
+        .map_err(|e| {
+            AppError::UnprocessableEntity(format!("Failed to find main .tex file: {}", e))
+        })?;
+
+    info!("Found main .tex file: {:?}", main_tex_path);
+
+    // Copy main.tex to paper directory as source.tex
+    let source_tex_path = paper_dir.join("source.tex");
+    fs::copy(&main_tex_path, &source_tex_path)
+        .map_err(|e| AppError::InternalServerError(format!("Failed to copy .tex file: {}", e)))?;
+
+    let file_path = source_tex_path.to_str().unwrap().to_string();
 
     // Create paper record with source URL
     let paper = Paper::create(pool, title.clone(), Some(url), file_path.clone())
@@ -277,12 +260,14 @@ async fn handle_arxiv_import(
             AppError::InternalServerError(format!("Failed to create paper: {}", e))
         })?;
 
-    // Extract + chunk synchronously at import time (no auto-translation)
-    match PdfExtractor::extract_with_recovery(Path::new(&file_path)) {
-        Ok(result) => {
-            if !result.text.trim().is_empty() {
-                let chunker = TextChunker::default();
-                let chunks = chunker.chunk(&result.text);
+    // Read and chunk LaTeX file
+    match LatexChunker::read_latex_file(&source_tex_path) {
+        Ok(latex_content) => {
+            let chunker = LatexChunker::default();
+            let chunks = chunker.chunk(&latex_content);
+
+            if !chunks.is_empty() {
+                let chunks_len = chunks.len();
                 for ch in chunks {
                     let _ = Chunk::create(
                         pool,
@@ -293,12 +278,14 @@ async fn handle_arxiv_import(
                         ch.token_count.map(|t| t as i32),
                     ).await;
                 }
-                info!("Prepared chunks at import for paper {}", paper.id);
+                info!("Prepared {} LaTeX chunks at import for paper {}", chunks_len, paper.id);
             } else {
-                warn!("Extraction returned empty text at import for paper {}", paper.id);
+                warn!("LaTeX chunker returned empty chunks for paper {}", paper.id);
             }
         }
-        Err(e) => warn!("Extraction failed at import for {}: {}", paper.id, e),
+        Err(e) => {
+            warn!("Failed to read or chunk LaTeX file for {}: {}", paper.id, e);
+        }
     }
 
     // Build Location header
@@ -316,7 +303,7 @@ async fn handle_arxiv_import(
         Json(ImportResponse {
             paper_id: paper.id,
             status: "pending".to_string(),
-            message: "Paper imported successfully. Chunks prepared if possible. Next: POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
+            message: "Paper imported successfully from LaTeX source. Chunks prepared. Next: POST /api/papers/{id}/translate, then optionally /extract-terms-jp and /scan-jp.".to_string(),
         }),
     ))
 }

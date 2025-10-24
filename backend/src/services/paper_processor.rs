@@ -1,12 +1,12 @@
 use crate::models::{Chunk, Paper, PaperStatus, Term};
 use crate::services::llm::{LlmClient, LlmLogger};
-use crate::services::pdf::{PdfExtractor, TextChunker};
+use crate::services::latex::LatexChunker;
 use crate::services::terms::{DefinitionGenerator, JapaneseTermExtractor, OccurrenceScannerJa};
 use crate::services::translation::TranslationService;
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
 use std::path::Path;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Paper processing orchestrator (FR-031, FR-032, FR-033)
 /// Coordinates: extraction → chunking → translation → term extraction
@@ -351,39 +351,26 @@ impl PaperProcessor {
 
         let mut chunks = Chunk::find_by_paper_id(&self.pool, paper_id).await?;
 
-        // If no chunks exist, extract from PDF and create them
+        // If no chunks exist, extract from LaTeX source and create them
         if chunks.is_empty() {
-            info!("No chunks found for paper {}. Extracting from PDF...", paper_id);
+            info!("No chunks found for paper {}. Processing LaTeX source...", paper_id);
 
             let paper = Paper::find_by_id(&self.pool, paper_id).await?;
             let file_path = Path::new(&paper.file_path);
 
-            // Extract text from PDF
-            let extraction_result = PdfExtractor::extract_with_recovery(file_path)?;
+            // Read and process LaTeX file
+            let latex_content = LatexChunker::read_latex_file(file_path)
+                .context("Failed to read LaTeX file")?;
 
-            // Log warnings
-            for warning in &extraction_result.warnings {
-                warn!("PDF extraction warning for {}: {}", paper_id, warning);
-            }
-
-            // Check if extraction is usable
-            if !PdfExtractor::is_extraction_usable(&extraction_result) {
-                anyhow::bail!("PDF extraction produced insufficient text. The file may be corrupted, encrypted, or contain only scanned images.");
-            }
-
-            if extraction_result.is_partial {
-                warn!("PDF extraction is partial for {} - some content may be missing", paper_id);
-            }
-
-            // Chunk text
-            let chunker = TextChunker::default();
-            let text_chunks = chunker.chunk(&extraction_result.text);
+            // Chunk LaTeX text
+            let chunker = LatexChunker::default();
+            let text_chunks = chunker.chunk(&latex_content);
 
             if text_chunks.is_empty() {
-                anyhow::bail!("No processable content found in PDF");
+                anyhow::bail!("No processable content found in LaTeX file");
             }
 
-            info!("Created {} chunks from PDF for paper {}", text_chunks.len(), paper_id);
+            info!("Created {} chunks from LaTeX for paper {}", text_chunks.len(), paper_id);
 
             // Save chunks to database
             for chunk in &text_chunks {
@@ -617,16 +604,18 @@ impl PaperProcessor {
             .filter_map(|chunk| async move {
                 if let Some(trans_text) = chunk.trans_html {
                     if !trans_text.trim().is_empty() {
-                        return Some((chunk.index, trans_text));
+                        // Strip LaTeX math expressions before term extraction
+                        let clean_text = strip_latex_math(&trans_text);
+                        return Some((chunk.index, clean_text));
                     }
                 }
                 None
             })
-            .map(|(index, trans_text)| {
+            .map(|(index, clean_text)| {
                 let ext = extractor.clone();
                 async move {
-                    let result = ext.extract_from_text(&trans_text, Some(4000)).await;
-                    (index, trans_text, result)
+                    let result = ext.extract_from_text(&clean_text, Some(4000)).await;
+                    (index, clean_text, result)
                 }
             })
             .buffer_unordered(conc);
@@ -767,4 +756,42 @@ impl PaperProcessor {
         }
         Ok(())
     }
+}
+
+/// Strip LaTeX math expressions from text to avoid extracting variables as terms
+/// Removes: $...$, $$...$$, \[...\], \(...\), and equation environments
+fn strip_latex_math(text: &str) -> String {
+    use regex::Regex;
+
+    let mut result = text.to_string();
+
+    // Remove display math: $$...$$
+    let re_display_double = Regex::new(r"\$\$[^$]*?\$\$").unwrap();
+    result = re_display_double.replace_all(&result, " ").to_string();
+
+    // Remove inline math: $...$
+    let re_inline = Regex::new(r"\$[^$]+?\$").unwrap();
+    result = re_inline.replace_all(&result, " ").to_string();
+
+    // Remove \[...\] display math
+    let re_bracket = Regex::new(r"\\\[.*?\\\]").unwrap();
+    result = re_bracket.replace_all(&result, " ").to_string();
+
+    // Remove \(...\) inline math
+    let re_paren = Regex::new(r"\\\(.*?\\\)").unwrap();
+    result = re_paren.replace_all(&result, " ").to_string();
+
+    // Remove equation environments: \begin{equation}...\end{equation}
+    let re_equation = Regex::new(r"\\begin\{equation\*?\}.*?\\end\{equation\*?\}").unwrap();
+    result = re_equation.replace_all(&result, " ").to_string();
+
+    // Remove align environments: \begin{align}...\end{align}
+    let re_align = Regex::new(r"\\begin\{align\*?\}.*?\\end\{align\*?\}").unwrap();
+    result = re_align.replace_all(&result, " ").to_string();
+
+    // Normalize multiple spaces to single space
+    let re_spaces = Regex::new(r"\s+").unwrap();
+    result = re_spaces.replace_all(&result, " ").to_string();
+
+    result.trim().to_string()
 }
