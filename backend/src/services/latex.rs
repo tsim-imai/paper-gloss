@@ -110,13 +110,27 @@ impl LatexChunker {
         let re_cite = Regex::new(r"\\cite[tp]?\{[^}]*\}").unwrap();
         result = re_cite.replace_all(&result, "").to_string();
 
-        // Remove figure environments entirely (including content)
-        let re_figure = Regex::new(r"\\begin\{figure\*?\}.*?\\end\{figure\*?\}").unwrap();
-        result = re_figure.replace_all(&result, "").to_string();
+        // Replace figure/table environments with their captions (if any), otherwise remove
+        fn replace_env_with_captions(mut s: String, env: &str) -> String {
+            let pattern = format!(r"(?s)\\begin\{{{}\*?\}}(.*?)\\end\{{{}\*?\}}", env, env);
+            let re_env = Regex::new(&pattern).unwrap();
+            let re_caption = Regex::new(r"\\caption\{([^}]*)\}").unwrap();
+            loop {
+                let caps = match re_env.captures(&s) { Some(c) => c, None => break };
+                let full = caps.get(0).unwrap();
+                let body = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                let mut captions: Vec<String> = Vec::new();
+                for cap in re_caption.captures_iter(body) {
+                    if let Some(m) = cap.get(1) { captions.push(m.as_str().to_string()); }
+                }
+                let replacement = if captions.is_empty() { String::new() } else { format!("{}\n\n", captions.join("\n\n")) };
+                s.replace_range(full.range(), &replacement);
+            }
+            s
+        }
 
-        // Remove table environments entirely (including content)
-        let re_table = Regex::new(r"\\begin\{table\*?\}.*?\\end\{table\*?\}").unwrap();
-        result = re_table.replace_all(&result, "").to_string();
+        result = replace_env_with_captions(result, "figure");
+        result = replace_env_with_captions(result, "table");
 
         result
     }
@@ -189,13 +203,13 @@ impl LatexChunker {
         for para in paragraphs {
             let para_words = Self::count_words(para);
 
-            // If adding this para would exceed max, finalize current chunk
+            // If adding this para would exceed max, finalize only at a safe boundary
             if word_count + para_words > self.max_words && word_count >= self.min_words {
-                if !current_chunk.trim().is_empty() {
+                if !current_chunk.trim().is_empty() && Self::is_safe_boundary(&current_chunk) {
                     chunks.push(self.create_chunk(start_index + chunks.len(), &current_chunk));
+                    current_chunk = String::new();
+                    word_count = 0;
                 }
-                current_chunk = String::new();
-                word_count = 0;
             }
 
             if !current_chunk.is_empty() {
@@ -211,6 +225,37 @@ impl LatexChunker {
         }
 
         chunks
+    }
+
+    /// Returns true if text ends at a safe LaTeX boundary (not inside math/env)
+    fn is_safe_boundary(text: &str) -> bool {
+        use regex::Regex;
+        // Strip display and bracket/paren math, then check inline $ parity
+        let mut tmp = text.to_string();
+        let re_display_double = Regex::new(r"\$\$[^$]*?\$\$").unwrap();
+        tmp = re_display_double.replace_all(&tmp, " ").to_string();
+        let re_bracket = Regex::new(r"\\\[.*?\\\]").unwrap();
+        tmp = re_bracket.replace_all(&tmp, " ").to_string();
+        let re_paren = Regex::new(r"\\\(.*?\\\)").unwrap();
+        tmp = re_paren.replace_all(&tmp, " ").to_string();
+
+        let mut unescaped_dollars = 0usize;
+        let bytes = tmp.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let c = bytes[i] as char;
+            if c == '$' {
+                if i == 0 || bytes[i - 1] as char != '\\' { unescaped_dollars += 1; }
+            }
+            i += 1;
+        }
+        if unescaped_dollars % 2 != 0 { return false; }
+
+        let begin_count = Regex::new(r"\\begin\{").unwrap().find_iter(text).count();
+        let end_count   = Regex::new(r"\\end\{").unwrap().find_iter(text).count();
+        if begin_count != end_count { return false; }
+
+        true
     }
 
     /// Count words (ignoring LaTeX commands in math mode)

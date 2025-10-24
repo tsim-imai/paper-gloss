@@ -77,8 +77,8 @@ export default function PipelineStatus({ paper }: PipelineStatusProps) {
 
   return (
     <div>
-      {/* Pipelines in horizontal layout */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+      {/* Pipelines in vertical layout */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {/* A: Translation */}
         <PipelineCard
           title="Translation"

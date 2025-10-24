@@ -70,10 +70,8 @@ export default function PaperPage() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '0.75rem',
-          backgroundColor: '#2a2a2a',
-          borderRadius: '8px',
-          border: '1px solid #444',
+          paddingBottom: '0.75rem',
+          borderBottom: '1px solid #444',
         }}
       >
         <div style={{ flex: 1 }}>

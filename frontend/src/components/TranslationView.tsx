@@ -4,6 +4,7 @@ import { apiClient } from '../services/api'
 import { Chunk, OccurrencesListResponse } from '../types'
 import TermHighlight from './translation/TermHighlight'
 import TermTooltip from './translation/TermTooltip'
+import { LatexRenderer } from '../utils/latexRenderer'
 
 interface TranslationViewProps {
   paperId: string
@@ -241,14 +242,8 @@ export default function TranslationView({ paperId }: TranslationViewProps) {
                 >
                   Original
                 </div>
-                <div
-                  style={{
-                    lineHeight: '1.6',
-                    whiteSpace: 'pre-wrap',
-                    color: '#ffffff',
-                  }}
-                >
-                  {chunk.original_text}
+                <div style={{ color: '#ffffff', lineHeight: '1.6' }}>
+                  <LatexRenderer text={chunk.original_text} />
                 </div>
               </div>
             )}

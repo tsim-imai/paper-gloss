@@ -35,7 +35,21 @@ impl TranslationService {
             match self.llm_client.translate(source_text).await {
                 Ok(translated) => {
                     // FR-012: Preserve math/labels from source if LLM output damaged them
-                    let final_text = preserve_tokens(source_text, &translated);
+                    let mut final_text = preserve_tokens(source_text, &translated);
+                    // Validate invariants (math/commands intact). Fallback to strict mode once if broken.
+                    if !validate_invariants(source_text, &final_text) {
+                        warn!("Invariant check failed; retrying with strict mode");
+                        if let Ok(strict_out) = self.llm_client.translate_strict(source_text).await {
+                            final_text = preserve_tokens(source_text, &strict_out);
+                            if !validate_invariants(source_text, &final_text) {
+                                last_error = Some(anyhow::anyhow!("LaTeX invariants failed after strict retry"));
+                                continue; // go to next attempt/backoff
+                            }
+                        } else {
+                            last_error = Some(anyhow::anyhow!("Strict translation failed"));
+                            continue;
+                        }
+                    }
                     return Ok(TranslationResult {
                         translated_text: final_text,
                         duration: start.elapsed(),
@@ -222,6 +236,42 @@ fn preserve_tokens(src: &str, out: &str) -> String {
     }
 
     result
+}
+
+/// Validate simple LaTeX invariants to detect broken outputs
+fn validate_invariants(_src: &str, out: &str) -> bool {
+    // 1) Unescaped single $ must be even after removing display/\[\]/\(\)
+    let mut tmp = out.to_string();
+    let re_display_double = Regex::new(r"\$\$[^$]*?\$\$").unwrap();
+    tmp = re_display_double.replace_all(&tmp, " ").to_string();
+    let re_bracket = Regex::new(r"\\\[.*?\\\]").unwrap();
+    tmp = re_bracket.replace_all(&tmp, " ").to_string();
+    let re_paren = Regex::new(r"\\\(.*?\\\)").unwrap();
+    tmp = re_paren.replace_all(&tmp, " ").to_string();
+
+    let mut unescaped_dollars = 0usize;
+    let bytes = tmp.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if c == '$' {
+            if i == 0 || bytes[i - 1] as char != '\\' { unescaped_dollars += 1; }
+        }
+        i += 1;
+    }
+    if unescaped_dollars % 2 != 0 { return false; }
+
+    // 2) Rough begin/end balance
+    let begin_count = Regex::new(r"\\begin\{").unwrap().find_iter(out).count();
+    let end_count   = Regex::new(r"\\end\{").unwrap().find_iter(out).count();
+    if begin_count != end_count { return false; }
+
+    // 3) Curly braces rough balance
+    let open_braces = out.matches('{').count();
+    let close_braces = out.matches('}').count();
+    if open_braces != close_braces { return false; }
+
+    true
 }
 
 #[cfg(test)]

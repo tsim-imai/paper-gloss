@@ -186,6 +186,8 @@ TRANSLATION RULES:
 2. Keep ALL LaTeX math ($...$, $$...$$, \[...\], equation environments) UNCHANGED
 3. Keep LaTeX commands (\section, \cite, \ref, \label, \textbf) UNCHANGED
 4. Only translate natural language text between LaTeX commands
+5. Do NOT add or remove any LaTeX tokens (backslashes, braces, command names). If unsure, leave tokens unchanged.
+6. Do NOT break line breaks inside math or LaTeX commands.
 
 EXAMPLES:
 Input: "We compare two distributions $P$ and $Q$ where $P \\neq Q$."
@@ -194,12 +196,34 @@ Output: "2つの分布 $P$ と $Q$ を比較する。ここで $P \\neq Q$ で�
 Input: "The loss is defined as $L = \\sum_{i=1}^n (y_i - \\hat{y}_i)^2$."
 Output: "損失は $L = \\sum_{i=1}^n (y_i - \\hat{y}_i)^2$ と定義される。"
 
+Input: "\\textbf{Important:} We use \\emph{contrastive learning}."
+Output: "\\textbf{重要:} \\emph{コントラスト学習} を用いる。"
+
 Preserve all LaTeX structure and formatting exactly."#.to_string(),
             },
             Message {
                 role: "user".to_string(),
                 content: source_text.to_string(),
             },
+        ];
+
+        self.chat_completion(messages, None, Some(4000)).await
+    }
+
+    /// Strict translation: stronger constraints (fallback mode)
+    pub async fn translate_strict(&self, source_text: &str) -> Result<String> {
+        let messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: r#"You are a professional English-to-Japanese translator for LaTeX.
+
+STRICT RULES:
+- Absolutely DO NOT modify any LaTeX commands or math. Keep all backslashes, braces, and command names exactly.
+- Translate only natural language text. If a token looks like LaTeX, leave it unchanged.
+- If unsure, prefer leaving LaTeX tokens untouched rather than changing them.
+"#.to_string(),
+            },
+            Message { role: "user".to_string(), content: source_text.to_string() },
         ];
 
         self.chat_completion(messages, None, Some(4000)).await
